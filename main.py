@@ -1,23 +1,88 @@
-from openai import OpenAI
-from dotenv import load_dotenv
-import os
+"""
+Main entry point for X-Bot.
 
-from agent import get_prompt_builder, ToneStyle
+This module demonstrates the usage of the LLM integration and prompt engineering.
+"""
+
+from agent import create_llm_client, get_prompt_builder, ToneStyle
 
 
 def main():
-    load_dotenv(dotenv_path="./config/.env")
+    """Main function demonstrating LLM integration and prompt engineering."""
+    # Create LLM client (loads config from environment)
+    client = create_llm_client()
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "OPENROUTER_API_KEY not found. Please create a .env file with OPENROUTER_API_KEY=your_key"
-        )
-
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key,
+    # Simple chat example
+    print("Simple Chat Example:")
+    print("-" * 50)
+    response = client.simple_chat(
+        prompt="What is the meaning of life?",
+        system_prompt="You are a philosophical assistant. Keep answers concise.",
     )
+    print(response)
+    print()
+
+    # Multi-turn conversation example
+    print("Multi-turn Conversation Example:")
+    print("-" * 50)
+
+    # Create a conversation
+    conversation = client.create_conversation(
+        system_prompt="You are a helpful coding assistant."
+    )
+
+    # First turn
+    conversation = client.add_user_message(
+        conversation,
+        "What is Python?"
+    )
+
+    response = client.chat_completion(messages=conversation)
+    assistant_response = response.choices[0].message.content
+
+    conversation = client.add_assistant_message(
+        conversation,
+        assistant_response
+    )
+
+    print(f"User: What is Python?")
+    print(f"Assistant: {assistant_response}")
+    print()
+
+    # Second turn
+    conversation = client.add_user_message(
+        conversation,
+        "What are its main use cases?"
+    )
+
+    response = client.chat_completion(messages=conversation)
+    assistant_response = response.choices[0].message.content
+
+    print(f"User: What are its main use cases?")
+    print(f"Assistant: {assistant_response}")
+    print()
+
+    # Streaming example
+    print("Streaming Example:")
+    print("-" * 50)
+
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Write a haiku about coding."},
+    ]
+
+    print("Response: ", end="", flush=True)
+    for chunk in client.stream_chat(messages):
+        print(chunk, end="", flush=True)
+
+    print("\n")
+    print()
+
+    # Prompt Engineering Examples
+    print("="*50)
+    print("PROMPT ENGINEERING EXAMPLES")
+    print("="*50)
+    print()
 
     # Initialize the prompt builder with default personality
     # You can also use preset personalities like: get_prompt_builder("tech_influencer")
@@ -33,40 +98,35 @@ def main():
         constraints={"include_hashtags": True}
     )
 
-    print("=== Generating Tweet ===\n")
+    print("=== Generating Tweet ===")
+    print("-" * 50)
 
-    completion = client.chat.completions.create(
-        extra_body={},
-        model="deepseek/deepseek-v3.2-exp",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": tweet_prompt}
-        ],
+    tweet_response = client.simple_chat(
+        prompt=tweet_prompt,
+        system_prompt=system_prompt
     )
 
-    print(completion.choices[0].message.content)
-    print("\n" + "="*50 + "\n")
+    print(tweet_response)
+    print()
 
     # Example: Generate a reply
     reply_prompt = prompt_builder.build_reply_prompt(
         original_tweet="Just deployed my first ML model to production! 🚀",
         author="developer123",
-        tone=ToneStyle.ENCOURAGING,
+        tone=ToneStyle.CONVERSATIONAL,
         intent="congratulate and offer tips"
     )
 
-    print("=== Generating Reply ===\n")
+    print("=== Generating Reply ===")
+    print("-" * 50)
 
-    completion = client.chat.completions.create(
-        extra_body={},
-        model="deepseek/deepseek-v3.2-exp",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": reply_prompt}
-        ],
+    reply_response = client.simple_chat(
+        prompt=reply_prompt,
+        system_prompt=system_prompt
     )
 
-    print(completion.choices[0].message.content)
+    print(reply_response)
+    print()
 
 
 if __name__ == "__main__":

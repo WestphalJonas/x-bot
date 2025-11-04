@@ -1,8 +1,15 @@
 """
 Agent package for X Bot
 
-This package contains the core agent logic, including personality and prompt engineering.
+This package provides LLM integration, agent functionality, and prompt engineering.
 """
+
+from .core import (
+    LLMClient,
+    LLMConfig,
+    Message,
+    create_llm_client,
+)
 
 from .personality import (
     PromptBuilder,
@@ -14,6 +21,12 @@ from .personality import (
 )
 
 __all__ = [
+    # LLM Integration
+    "LLMClient",
+    "LLMConfig",
+    "Message",
+    "create_llm_client",
+    # Prompt Engineering
     "PromptBuilder",
     "PersonalityConfig",
     "ToneStyle",
