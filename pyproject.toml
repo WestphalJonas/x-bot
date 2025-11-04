@@ -4,4 +4,13 @@ version = "0.0.1"
 description = "Small 𝕏 bot"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "apscheduler>=3.11.1",
+    "openai>=2.7.0",
+    "python-dotenv>=1.2.1",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+    "selenium>=4.38.0",
+    "twscrape>=0.17.0",
+    "webdriver-manager>=4.0.2",
+]
