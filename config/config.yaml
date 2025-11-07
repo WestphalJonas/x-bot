@@ -6,15 +6,15 @@ rate_limits:
 selenium:
   min_delay_seconds: 5.0
   max_delay_seconds: 15.0
-  headless: true
+  headless: false
   user_agent_rotation: true
 
 llm:
-  provider: "openai"
-  fallback_providers:
-    - "openrouter"
-    - "google"
-  model: "gpt-4o-mini"
+  provider: "openrouter"
+  #fallback_providers:
+   # - "openai"
+   # - "google"
+  model: "openai/gpt-4o-mini"
   embedding_model: "text-embedding-3-small"
   embedding_provider: "openai"
   max_tokens: 150

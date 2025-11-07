@@ -5,6 +5,7 @@ description = "Small 𝕏 bot"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "aiofiles>=24.1.0",
     "apscheduler>=3.11.1",
     "openai>=2.7.0",
     "pydantic>=2.0.0",
@@ -13,6 +14,8 @@ dependencies = [
     "requests>=2.32.5",
     "selenium>=4.38.0",
     "selenium-stealth>=1.0.6",
+    "setuptools>=65.0.0",
+    "tenacity>=8.2.0",
     "twscrape>=0.17.0",
     "undetected-chromedriver>=3.5.5",
     "webdriver-manager>=4.0.2",

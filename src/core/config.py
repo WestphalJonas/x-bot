@@ -1,10 +1,11 @@
 """Configuration models and loading."""
 
+import os
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RateLimitsConfig(BaseModel):
@@ -30,10 +31,23 @@ class SeleniumConfig(BaseModel):
     max_delay_seconds: float = Field(
         default=15.0, ge=5.0, description="Max delay between actions"
     )
-    headless: bool = Field(default=True, description="Run browser in headless mode")
+    headless: bool = Field(
+        default=True,
+        description="Run browser in headless mode (can be overridden with SELENIUM_HEADLESS env var)",
+    )
     user_agent_rotation: bool = Field(
         default=True, description="Rotate User-Agent strings"
     )
+
+    @field_validator("headless", mode="before")
+    @classmethod
+    def override_headless_from_env(cls, v):
+        """Override headless mode from environment variable if set."""
+        env_value = os.getenv("SELENIUM_HEADLESS")
+        if env_value is not None:
+            # Convert string to bool
+            return env_value.lower() in ("true", "1", "yes", "on")
+        return v
 
 
 class LLMConfig(BaseModel):
