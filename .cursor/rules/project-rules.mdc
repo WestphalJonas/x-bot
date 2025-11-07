@@ -1,0 +1,961 @@
+---
+alwaysApply: true
+---
+# X Bot - Coding Agent Rules
+
+## File Organization
+
+ALWAYS organize code in this structure:
+```
+src/
+├── core/           # Agent core, LLM integration, personality
+├── memory/         # Chroma vector DB, embeddings, similarity search
+├── x/        # Selenium automation, posting, mentions
+├── scheduler/      # APScheduler jobs, task orchestration
+├── ingest/         # RSS feeds, event detection, trends
+├── state/          # State management (JSON → SQLite → PostgreSQL)
+├── monitoring/     # Logging, metrics, health checks
+└── utils/          # Shared utilities
+```
+
+When creating new modules:
+- Place them in the appropriate directory above
+- Use `__init__.py` files to expose public APIs
+- Keep modules focused on a single responsibility
+
+## Code Implementation Rules
+
+### Python Standards
+
+MUST:
+- Use Python 3.14+ syntax (type hints with `|` union syntax)
+- Add type hints to ALL function signatures
+- Format with Black (line length: 100)
+- Use Pydantic v2 models for ALL data structures
+- Use `async/await` for ALL I/O operations (API calls, file operations, DB queries)
+- Use structured logging with context
+
+MUST NOT:
+- Use `typing.Union` (use `|` instead)
+- Skip type hints
+- Use synchronous I/O when async is available
+- Hardcode configuration values
+
+### Type Safety Implementation
+
+ALWAYS use Pydantic models for data structures:
+
+```python
+from pydantic import BaseModel, Field
+from datetime import datetime
+
+class AgentState(BaseModel):
+    personality: dict[str, str] = Field(..., description="Bot personality config")
+    post_count: int = Field(default=0, ge=0)
+    last_post_time: datetime | None = Field(default=None)
+    
+    @classmethod
+    def load(cls, path: str) -> "AgentState":
+        """Load state from JSON file."""
+        # Implementation here
+        
+    async def save(self, path: str) -> None:
+        """Save state atomically."""
+        # Write to temp file, then rename
+```
+
+### Error Handling
+
+ALWAYS implement retry logic for external APIs:
+
+```python
+import asyncio
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10)
+)
+async def call_openai_api(prompt: str) -> str:
+    """Call OpenAI API with automatic retry."""
+    try:
+        # API call
+        pass
+    except Exception as e:
+        logger.error("api_call_failed", error=str(e), attempt=...)
+        raise
+```
+
+MUST:
+- Use specific exception types (not bare `except:`)
+- Log errors with structured context
+- Implement exponential backoff for retries
+- Never crash silently - always log before raising
+
+### Logging Implementation
+
+ALWAYS use structured logging:
+
+```python
+import structlog
+
+logger = structlog.get_logger()
+
+# Good
+logger.info(
+    "tweet_posted",
+    tweet_id=tweet_id,
+    length=len(text),
+    timestamp=datetime.now().isoformat()
+)
+
+# Bad - don't use f-strings for logs
+logger.info(f"Tweet {tweet_id} posted")  # ❌
+```
+
+MUST include context:
+- tweet_id, user_id for Twitter actions
+- timestamps (ISO format)
+- token usage (for LLM calls)
+- error details with stack traces
+
+## Twitter/X Implementation
+
+### Browser Automation
+
+MUST use `undetected-chromedriver` - NEVER standard Selenium:
+
+```python
+import undetected_chromedriver as uc
+from selenium_stealth import stealth
+
+async def create_driver() -> uc.Chrome:
+    """Create undetected Chrome driver."""
+    options = uc.ChromeOptions()
+    options.add_argument("--headless")
+    driver = uc.Chrome(options=options)
+    stealth(driver, ...)  # Apply stealth
+    return driver
+```
+
+MUST implement:
+- Cookie persistence (save/load from `config/cookie.json`)
+- Random delays: `random.uniform(config.selenium.min_delay_seconds, config.selenium.max_delay_seconds)` between actions
+- User-Agent rotation (if `config.selenium.user_agent_rotation` is True)
+- Human-like mouse movements (use selenium-stealth)
+
+MUST NOT:
+- Login on every session (check cookies first)
+- Use hardcoded delays
+- Use standard `selenium.webdriver.Chrome`
+
+### Rate Limiting
+
+MUST enforce limits from `config/config.json`:
+- Load `max_posts_per_day` and `max_replies_per_day` from config
+- Check counters before posting/replying
+- Reset counters at midnight UTC
+
+```python
+class RateLimiter:
+    def __init__(self, config: BotConfig):
+        self.max_posts = config.rate_limits.max_posts_per_day
+        self.max_replies = config.rate_limits.max_replies_per_day
+    
+    async def can_post(self) -> bool:
+        """Check if posting is allowed."""
+        state = await self.state.load()
+        if state.counters["posts_today"] >= self.max_posts:
+            logger.warning("rate_limit_exceeded", type="post", limit=self.max_posts)
+            return False
+        return True
+```
+
+### Compliance
+
+MUST:
+- Verify profile bio contains "🤖 AI Bot" or similar disclosure
+- NEVER auto-post trending topics (check and reject)
+- Only auto-reply with opt-out mechanism
+- Log all compliance checks
+
+## LLM Integration
+
+### Multi-Provider Support
+
+MUST support multiple AI providers with automatic fallback:
+
+### Required Dependencies
+
+MUST install provider-specific packages:
+
+```python
+# OpenAI (always required for embeddings, optional for generation)
+openai>=1.0.0
+
+# Google Gemini
+google-generativeai>=0.3.0
+
+# OpenRouter (uses OpenAI-compatible API, but separate package recommended)
+openai>=1.0.0  # Same as OpenAI
+
+# Anthropic Claude
+anthropic>=0.18.0
+```
+
+Install based on configured providers:
+```bash
+# Minimum (OpenAI only)
+pip install openai
+
+# With Google support
+pip install openai google-generativeai
+
+# With all providers
+pip install openai google-generativeai anthropic
+```
+
+### Provider Implementation
+
+MUST implement a unified LLM client interface:
+
+```python
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Literal
+
+class LLMProvider(str, Enum):
+    OPENAI = "openai"
+    GOOGLE = "google"
+    OPENROUTER = "openrouter"
+    ANTHROPIC = "anthropic"
+
+class LLMClient(ABC):
+    """Unified LLM client interface."""
+    
+    @abstractmethod
+    async def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        """Generate text using the provider."""
+        pass
+    
+    @abstractmethod
+    async def get_embedding(self, text: str) -> list[float]:
+        """Get embedding for text."""
+        pass
+
+class OpenAIClient(LLMClient):
+    """OpenAI implementation."""
+    def __init__(self, api_key: str, model: str, max_tokens: int, temperature: float):
+        from openai import AsyncOpenAI
+        self.client = AsyncOpenAI(api_key=api_key)
+        self.model = model
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+    
+    async def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+        )
+        logger.info(
+            "llm_call",
+            provider="openai",
+            model=self.model,
+            tokens=response.usage.total_tokens
+        )
+        return response.choices[0].message.content
+    
+    async def get_embedding(self, text: str) -> list[float]:
+        response = await self.client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text
+        )
+        return response.data[0].embedding
+
+class GoogleClient(LLMClient):
+    """Google Gemini implementation."""
+    def __init__(self, api_key: str, model: str, max_tokens: int, temperature: float):
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel(model)
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+    
+    async def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+        response = await self.model.generate_content_async(
+            full_prompt,
+            generation_config={
+                "max_output_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            }
+        )
+        logger.info("llm_call", provider="google", model=self.model.model_name)
+        return response.text
+    
+    async def get_embedding(self, text: str) -> list[float]:
+        # Use Google's embedding model
+        import google.generativeai as genai
+        result = await genai.embed_content_async(
+            model="models/embedding-001",
+            content=text
+        )
+        return result["embedding"]
+
+class OpenRouterClient(LLMClient):
+    """OpenRouter implementation (unified API for multiple providers)."""
+    def __init__(self, api_key: str, model: str, max_tokens: int, temperature: float):
+        from openai import AsyncOpenAI
+        self.client = AsyncOpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1"
+        )
+        self.model = model
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+    
+    async def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+        )
+        logger.info("llm_call", provider="openrouter", model=self.model)
+        return response.choices[0].message.content
+    
+    async def get_embedding(self, text: str) -> list[float]:
+        # OpenRouter uses OpenAI-compatible API
+        response = await self.client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text
+        )
+        return response.data[0].embedding
+
+class AnthropicClient(LLMClient):
+    """Anthropic Claude implementation."""
+    def __init__(self, api_key: str, model: str, max_tokens: int, temperature: float):
+        from anthropic import AsyncAnthropic
+        self.client = AsyncAnthropic(api_key=api_key)
+        self.model = model
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+    
+    async def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        response = await self.client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            system=system_prompt or "",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        logger.info("llm_call", provider="anthropic", model=self.model)
+        return response.content[0].text
+    
+    async def get_embedding(self, text: str) -> list[float]:
+        # Anthropic doesn't have embeddings, use OpenAI as fallback
+        raise NotImplementedError("Use OpenAI for embeddings when using Anthropic")
+```
+
+### Provider Factory with Fallback
+
+MUST implement automatic fallback:
+
+```python
+class LLMProviderFactory:
+    """Factory for creating LLM clients with fallback support."""
+    
+    def __init__(self, config: BotConfig, env_settings: EnvSettings):
+        self.config = config
+        self.env_settings = env_settings
+        self.clients: dict[str, LLMClient] = {}
+    
+    def _create_client(self, provider: str) -> LLMClient:
+        """Create client for specific provider."""
+        if provider == "openai":
+            return OpenAIClient(
+                api_key=self.env_settings.openai_api_key,
+                model=self.config.llm.model,
+                max_tokens=self.config.llm.max_tokens,
+                temperature=self.config.llm.temperature
+            )
+        elif provider == "google":
+            return GoogleClient(
+                api_key=self.env_settings.google_api_key,
+                model=self.config.llm.model,
+                max_tokens=self.config.llm.max_tokens,
+                temperature=self.config.llm.temperature
+            )
+        elif provider == "openrouter":
+            return OpenRouterClient(
+                api_key=self.env_settings.openrouter_api_key,
+                model=self.config.llm.model,
+                max_tokens=self.config.llm.max_tokens,
+                temperature=self.config.llm.temperature
+            )
+        elif provider == "anthropic":
+            return AnthropicClient(
+                api_key=self.env_settings.anthropic_api_key,
+                model=self.config.llm.model,
+                max_tokens=self.config.llm.max_tokens,
+                temperature=self.config.llm.temperature
+            )
+        else:
+            raise ValueError(f"Unknown provider: {provider}")
+    
+    async def generate_with_fallback(self, prompt: str, system_prompt: str | None = None) -> str:
+        """Generate text with automatic fallback."""
+        providers = [self.config.llm.provider] + self.config.llm.fallback_providers
+        
+        for provider in providers:
+            try:
+                if provider not in self.clients:
+                    self.clients[provider] = self._create_client(provider)
+                
+                result = await self.clients[provider].generate(prompt, system_prompt)
+                logger.info("llm_success", provider=provider)
+                return result
+                
+            except Exception as e:
+                logger.warning(
+                    "llm_provider_failed",
+                    provider=provider,
+                    error=str(e),
+                    fallback_to=providers[providers.index(provider) + 1] if providers.index(provider) < len(providers) - 1 else None
+                )
+                continue
+        
+        raise RuntimeError("All LLM providers failed")
+    
+    async def get_embedding(self, text: str) -> list[float]:
+        """Get embedding using configured embedding provider."""
+        provider = self.config.llm.embedding_provider
+        if provider == "openai":
+            client = OpenAIClient(
+                api_key=self.env_settings.openai_api_key,
+                model="gpt-4o-mini",  # Not used for embeddings
+                max_tokens=0,
+                temperature=0.0
+            )
+            return await client.get_embedding(text)
+        elif provider == "google":
+            client = GoogleClient(
+                api_key=self.env_settings.google_api_key,
+                model="gemini-1.5-flash",  # Not used for embeddings
+                max_tokens=0,
+                temperature=0.0
+            )
+            return await client.get_embedding(text)
+        else:
+            raise ValueError(f"Unsupported embedding provider: {provider}")
+```
+
+### Usage Example
+
+```python
+# Initialize factory
+factory = LLMProviderFactory(config, env_settings)
+
+# Generate tweet with automatic fallback
+tweet = await factory.generate_with_fallback(
+    prompt="Write a tweet about AI",
+    system_prompt=SYSTEM_PROMPT
+)
+
+# Get embedding
+embedding = await factory.get_embedding("Some text")
+```
+
+MUST:
+- Use `config.llm.provider` for primary provider
+- Implement automatic fallback to `config.llm.fallback_providers`
+- Use `config.llm.embedding_provider` for embeddings (default: OpenAI)
+- Log token usage for every call
+- Enforce `config.llm.max_tokens` limit
+- Use JSON mode when possible for structured outputs
+
+### Embedding Caching
+
+ALWAYS check Chroma before calling any embedding API:
+
+```python
+async def get_embedding(text: str, factory: LLMProviderFactory) -> list[float]:
+    """Get embedding, checking cache first."""
+    # Check Chroma for existing embedding
+    results = collection.get(where={"text": text})
+    if results["ids"]:
+        logger.info("embedding_cache_hit", text_hash=hash(text))
+        return results["embeddings"][0]
+    
+    # Only call API if not cached
+    logger.info("embedding_cache_miss", provider=factory.config.llm.embedding_provider)
+    embedding = await factory.get_embedding(text)
+    
+    # Store in Chroma
+    collection.add(ids=[hash(text)], embeddings=[embedding], documents=[text])
+    return embedding
+```
+
+## Vector Database (Chroma)
+
+MUST:
+- Embed ALL tweets (posts and replies) before storing
+- Store metadata: timestamp, engagement metrics, topic tags
+- Use similarity threshold from `config.llm.similarity_threshold` (default: 0.85) for duplicate detection
+- Create topic-based collections for semantic search
+
+```python
+import chromadb
+from chromadb.config import Settings
+
+client = chromadb.Client(Settings(
+    chroma_db_impl="duckdb+parquet",
+    persist_directory="./data/chroma"
+))
+
+collection = client.get_or_create_collection("tweets")
+
+async def check_duplicate(text: str, config: BotConfig) -> bool:
+    """Check if tweet is duplicate."""
+    embedding = await get_embedding(text)
+    results = collection.query(
+        query_embeddings=[embedding],
+        n_results=1
+    )
+    threshold = config.llm.similarity_threshold
+    if results["distances"] and results["distances"][0][0] > threshold:
+        return True  # Duplicate found
+    return False
+```
+
+## State Management
+
+### Phase A (JSON)
+
+MUST:
+- Store state in `data/state.json`
+- Use Pydantic models for validation
+- Implement atomic writes (temp file → rename)
+- Handle file locking for concurrent access
+
+```python
+import json
+import tempfile
+from pathlib import Path
+
+async def save_state(state: AgentState, path: Path) -> None:
+    """Save state atomically."""
+    temp_path = path.with_suffix(".tmp")
+    async with aiofiles.open(temp_path, "w") as f:
+        await f.write(state.model_dump_json(indent=2))
+    temp_path.replace(path)  # Atomic rename
+```
+
+State structure MUST match:
+```python
+{
+    "personality": {"tone": "professional", "topics": ["AI"]},
+    "counters": {"posts_today": 0, "replies_today": 0},
+    "last_post_time": "2025-11-06T10:00:00Z"
+}
+```
+
+## Scheduling (APScheduler)
+
+MUST use BackgroundScheduler:
+
+```python
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+import random
+
+scheduler = BackgroundScheduler()
+
+# Posting: Use config values
+scheduler.add_job(
+    post_autonomous_tweet,
+    trigger=IntervalTrigger(
+        hours=config.scheduler.post_interval_hours,
+        jitter=int(config.scheduler.post_jitter_hours * 3600)
+    ),
+    id="post_tweet"
+)
+
+# Mentions: Use config value
+scheduler.add_job(
+    check_mentions,
+    trigger=IntervalTrigger(minutes=config.scheduler.mention_check_minutes),
+    id="check_mentions"
+)
+
+# Events: Use config value
+scheduler.add_job(
+    check_events,
+    trigger=IntervalTrigger(minutes=config.scheduler.event_check_minutes),
+    id="check_events"
+)
+```
+
+MUST:
+- Use jitter for randomization
+- Handle job failures gracefully
+- Log all scheduled executions
+
+## Configuration Management
+
+### Configuration Files
+
+MUST use two-tier configuration:
+1. **Environment variables** (`.env`) - Secrets and sensitive data
+2. **JSON config** (`config/config.json`) - Runtime settings and limits
+
+### Config Structure (`config/config.json`)
+
+ALWAYS use this Pydantic model structure:
+
+```python
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class RateLimitsConfig(BaseModel):
+    """Rate limiting configuration."""
+    max_posts_per_day: int = Field(default=5, ge=1, le=10, description="Max posts per day")
+    max_replies_per_day: int = Field(default=20, ge=1, le=50, description="Max replies per day")
+    reset_time_utc: str = Field(default="00:00", description="UTC time to reset counters (HH:MM)")
+
+class SeleniumConfig(BaseModel):
+    """Selenium/browser automation configuration."""
+    min_delay_seconds: float = Field(default=5.0, ge=1.0, description="Min delay between actions")
+    max_delay_seconds: float = Field(default=15.0, ge=5.0, description="Max delay between actions")
+    headless: bool = Field(default=True, description="Run browser in headless mode")
+    user_agent_rotation: bool = Field(default=True, description="Rotate User-Agent strings")
+
+class LLMConfig(BaseModel):
+    """LLM and AI configuration."""
+    provider: Literal["openai", "google", "openrouter", "anthropic"] = Field(
+        default="openai", 
+        description="Primary LLM provider"
+    )
+    fallback_providers: list[Literal["openai", "google", "openrouter", "anthropic"]] = Field(
+        default_factory=lambda: ["openrouter", "google"],
+        description="Fallback providers in order of preference"
+    )
+    model: str = Field(
+        default="gpt-4o-mini", 
+        description="Model name (provider-specific, e.g., 'gpt-4o-mini', 'gemini-1.5-flash', 'claude-3-haiku')"
+    )
+    embedding_model: str = Field(
+        default="text-embedding-3-small", 
+        description="Embedding model (OpenAI recommended for compatibility)"
+    )
+    embedding_provider: Literal["openai", "google"] = Field(
+        default="openai",
+        description="Provider for embeddings (OpenAI or Google)"
+    )
+    max_tokens: int = Field(default=150, ge=50, le=300, description="Max tokens per generation")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
+    similarity_threshold: float = Field(default=0.85, ge=0.0, le=1.0, description="Duplicate detection threshold")
+    use_fallback: bool = Field(default=True, description="Enable automatic fallback to backup providers")
+
+class SchedulerConfig(BaseModel):
+    """Task scheduling configuration."""
+    post_interval_hours: float = Field(default=8.0, ge=1.0, description="Average hours between posts")
+    post_jitter_hours: float = Field(default=1.0, ge=0.0, description="Random jitter in hours (±)")
+    mention_check_minutes: int = Field(default=30, ge=5, description="Minutes between mention checks")
+    event_check_minutes: int = Field(default=15, ge=5, description="Minutes between event checks")
+
+class PersonalityConfig(BaseModel):
+    """Bot personality configuration."""
+    tone: Literal["professional", "casual", "humorous", "technical"] = Field(default="professional")
+    topics: list[str] = Field(default_factory=lambda: ["AI", "technology"], description="Preferred topics")
+    style: Literal["concise", "detailed", "conversational"] = Field(default="concise")
+    min_tweet_length: int = Field(default=180, ge=1, le=280)
+    max_tweet_length: int = Field(default=280, ge=180, le=280)
+
+class BotConfig(BaseModel):
+    """Main bot configuration."""
+    rate_limits: RateLimitsConfig = Field(default_factory=RateLimitsConfig)
+    selenium: SeleniumConfig = Field(default_factory=SeleniumConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    personality: PersonalityConfig = Field(default_factory=PersonalityConfig)
+    
+    @classmethod
+    def load(cls, path: str = "config/config.json") -> "BotConfig":
+        """Load configuration from JSON file."""
+        import json
+        from pathlib import Path
+        
+        config_path = Path(path)
+        if not config_path.exists():
+            # Create default config
+            default_config = cls()
+            default_config.save(path)
+            return default_config
+        
+        with open(config_path) as f:
+            data = json.load(f)
+        return cls(**data)
+    
+    def save(self, path: str = "config/config.json") -> None:
+        """Save configuration to JSON file."""
+        import json
+        from pathlib import Path
+        
+        config_path = Path(path)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(config_path, "w") as f:
+            json.dump(self.model_dump(), f, indent=2)
+```
+
+### Default Config JSON Structure
+
+`config/config.json` MUST follow this structure:
+
+```json
+{
+  "rate_limits": {
+    "max_posts_per_day": 5,
+    "max_replies_per_day": 20,
+    "reset_time_utc": "00:00"
+  },
+  "selenium": {
+    "min_delay_seconds": 5.0,
+    "max_delay_seconds": 15.0,
+    "headless": true,
+    "user_agent_rotation": true
+  },
+  "llm": {
+    "provider": "openai",
+    "fallback_providers": ["openrouter", "google"],
+    "model": "gpt-4o-mini",
+    "embedding_model": "text-embedding-3-small",
+    "embedding_provider": "openai",
+    "max_tokens": 150,
+    "temperature": 0.7,
+    "similarity_threshold": 0.85,
+    "use_fallback": true
+  },
+  "scheduler": {
+    "post_interval_hours": 8.0,
+    "post_jitter_hours": 1.0,
+    "mention_check_minutes": 30,
+    "event_check_minutes": 15
+  },
+  "personality": {
+    "tone": "professional",
+    "topics": ["AI", "technology"],
+    "style": "concise",
+    "min_tweet_length": 180,
+    "max_tweet_length": 280
+  }
+}
+```
+
+### Configuration Usage
+
+ALWAYS load config at startup and pass to components:
+
+```python
+# Load config
+config = BotConfig.load("config/config.json")
+
+# Use in components
+rate_limiter = RateLimiter(config)
+llm_client = LLMClient(config)
+scheduler = BotScheduler(config)
+```
+
+MUST:
+- Validate config on load (Pydantic handles this)
+- Provide sensible defaults for all fields
+- Document all config fields with descriptions
+- Use config values instead of hardcoded constants
+- Allow config reload without restart (optional, Phase B)
+
+## Environment & Configuration
+
+### Environment Variables (`.env`)
+
+MUST:
+- Load from `.env` file using `python-dotenv`
+- NEVER commit `.env` to git
+- Validate required env vars on startup
+- Use type-safe config with Pydantic
+
+```python
+from pydantic_settings import BaseSettings
+from pydantic import Field
+
+class EnvSettings(BaseSettings):
+    """Environment variables (secrets)."""
+    # LLM Provider API Keys (at least one required)
+    openai_api_key: str | None = Field(default=None, env="OPENAI_API_KEY")
+    google_api_key: str | None = Field(default=None, env="GOOGLE_API_KEY")
+    openrouter_api_key: str | None = Field(default=None, env="OPENROUTER_API_KEY")
+    anthropic_api_key: str | None = Field(default=None, env="ANTHROPIC_API_KEY")
+    
+    # Twitter credentials
+    twitter_username: str = Field(..., env="TWITTER_USERNAME")
+    twitter_password: str = Field(..., env="TWITTER_PASSWORD")
+    
+    # Application settings
+    log_level: str = Field(default="INFO", env="LOG_LEVEL")
+    environment: str = Field(default="dev", env="ENVIRONMENT")
+    
+    def validate_provider_keys(self, config: BotConfig) -> None:
+        """Validate that required API keys are present."""
+        required_providers = [config.llm.provider] + config.llm.fallback_providers
+        
+        for provider in required_providers:
+            if provider == "openai" and not self.openai_api_key:
+                raise ValueError("OPENAI_API_KEY required for OpenAI provider")
+            elif provider == "google" and not self.google_api_key:
+                raise ValueError("GOOGLE_API_KEY required for Google provider")
+            elif provider == "openrouter" and not self.openrouter_api_key:
+                raise ValueError("OPENROUTER_API_KEY required for OpenRouter provider")
+            elif provider == "anthropic" and not self.anthropic_api_key:
+                raise ValueError("ANTHROPIC_API_KEY required for Anthropic provider")
+        
+        # Validate embedding provider key
+        if config.llm.embedding_provider == "openai" and not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY required for OpenAI embeddings")
+        elif config.llm.embedding_provider == "google" and not self.google_api_key:
+            raise ValueError("GOOGLE_API_KEY required for Google embeddings")
+    
+    class Config:
+        env_file = ".env"
+```
+
+### Configuration Loading Order
+
+1. Load environment variables (`.env`)
+2. Load JSON config (`config/config.json`)
+3. Validate both
+4. Validate that required API keys are present for configured providers
+5. Merge if needed (env vars can override JSON for some settings)
+
+### Required Environment Variables
+
+MUST provide API keys for at least the primary provider:
+
+```bash
+# Required for primary provider (based on config.llm.provider)
+OPENAI_API_KEY=sk-...          # For OpenAI
+GOOGLE_API_KEY=...              # For Google Gemini
+OPENROUTER_API_KEY=sk-...       # For OpenRouter
+ANTHROPIC_API_KEY=sk-...        # For Anthropic Claude
+
+# Required for fallback providers (if configured)
+# Add keys for providers in config.llm.fallback_providers
+
+# Required for embeddings (based on config.llm.embedding_provider)
+# Usually OPENAI_API_KEY or GOOGLE_API_KEY
+
+# Twitter credentials (always required)
+TWITTER_USERNAME=your_username
+TWITTER_PASSWORD=your_password
+
+# Optional
+LOG_LEVEL=INFO
+ENVIRONMENT=dev
+```
+
+## Testing Requirements
+
+MUST create tests for:
+- LLM integration (mock all provider responses: OpenAI, Google, OpenRouter, Anthropic)
+- Provider fallback logic (test failure scenarios)
+- State management (JSON load/save)
+- Duplicate detection (Chroma similarity)
+- Rate limiting logic
+- Selenium automation (headless mode)
+
+Test structure:
+```
+tests/
+├── unit/
+│   ├── test_llm.py
+│   ├── test_state.py
+│   └── test_memory.py
+├── integration/
+│   ├── test_twitter.py
+│   └── test_scheduler.py
+└── fixtures/
+    └── sample_tweets.json
+```
+
+Use pytest fixtures for mocks:
+```python
+@pytest.fixture
+def mock_openai_client():
+    """Mock OpenAI client."""
+    # Implementation
+```
+
+## Security
+
+MUST:
+- Add `.env` to `.gitignore`
+- NEVER hardcode secrets in code
+- Encrypt cookie files (use cryptography library)
+- Use Docker secrets in production
+
+MUST NOT:
+- Commit API keys
+- Commit passwords
+- Commit cookie files
+- Log sensitive data
+
+## Code Review Checklist
+
+Before submitting code, verify:
+- [ ] All functions have type hints
+- [ ] Pydantic models used for data structures
+- [ ] Error handling with retry logic
+- [ ] Structured logging with context
+- [ ] Configuration values used instead of hardcoded constants
+- [ ] Rate limiting enforced from config
+- [ ] TOS compliance maintained
+- [ ] Tests added/updated
+- [ ] No secrets committed
+- [ ] Config structure matches documented schema
+
+## Critical Rules Summary
+
+### ✅ ALWAYS DO
+- Use `undetected-chromedriver` (never standard Selenium)
+- Implement provider fallback for reliability
+- Cache embeddings in Chroma before API calls
+- Use async/await for I/O operations
+- Use Pydantic for validation
+- Log with structured context
+- Implement retry with exponential backoff
+- Persist cookies between sessions
+- Randomize delays (5-15 seconds)
+- Enforce rate limits from config (default: 5 posts/day, 20 replies/day)
+
+### ❌ NEVER DO
+- Post trending topics automatically
+- Login every session (use cookies)
+- Hardcode delays, limits, or any configuration values
+- Skip error handling
+- Commit secrets or API keys
+- Ignore rate limits
+- Skip duplicate detection
+- Use standard Selenium
+- Skip type hints
+- Hardcode model names, thresholds, or intervals (use config)
