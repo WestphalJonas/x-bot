@@ -4,3 +4,4 @@ __pycache__/
 config/cookie.json
 *.png
 .venv/
+.pytest_cache/
