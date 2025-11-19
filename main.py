@@ -1,20 +1,20 @@
 """Main entry point for autonomous Twitter/X posting bot."""
 
-import asyncio
 import logging
 import os
-from datetime import datetime
+import signal
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import AuthenticationError, RateLimitError
 
 from src.core.config import BotConfig
-from src.core.llm import LLMClient
-from src.state.manager import load_state, save_state
-from src.x.auth import load_cookies, login, save_cookies
-from src.x.driver import create_driver
-from src.x.posting import post_tweet
+from src.scheduler import BotScheduler
+from src.scheduler.jobs import (
+    check_notifications,
+    post_autonomous_tweet,
+    read_frontpage_posts,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -24,24 +24,34 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def main():
-    """Main entry point for the bot."""
-    # Load environment variables
-    load_dotenv()
+def load_env_settings() -> dict[str, str | None]:
+    """Load environment variables into a dictionary.
 
-    # Load configuration
-    config_path = Path("config/config.yaml")
-    config = BotConfig.load(config_path)
+    Returns:
+        Dictionary with environment variable values
+    """
+    return {
+        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+        "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY"),
+        "TWITTER_USERNAME": os.getenv("TWITTER_USERNAME"),
+        "TWITTER_PASSWORD": os.getenv("TWITTER_PASSWORD"),
+    }
 
-    logger.info("bot_starting", extra={"config_path": str(config_path)})
 
-    # Get environment variables
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-    twitter_username = os.getenv("TWITTER_USERNAME")
-    twitter_password = os.getenv("TWITTER_PASSWORD")
+def validate_env_settings(env_settings: dict[str, str | None]) -> None:
+    """Validate that required environment variables are set.
 
-    # Validate that at least one LLM provider is configured
+    Args:
+        env_settings: Dictionary with environment variables
+
+    Raises:
+        ValueError: If required environment variables are missing
+    """
+    openai_api_key = env_settings.get("OPENAI_API_KEY")
+    openrouter_api_key = env_settings.get("OPENROUTER_API_KEY")
+    twitter_username = env_settings.get("TWITTER_USERNAME")
+    twitter_password = env_settings.get("TWITTER_PASSWORD")
+
     if not openai_api_key and not openrouter_api_key:
         raise ValueError(
             "At least one LLM provider API key is required. "
@@ -52,113 +62,87 @@ async def main():
     if not twitter_password:
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
-    # Load state
-    state = await load_state()
 
-    # Check rate limits
-    if state.counters["posts_today"] >= config.rate_limits.max_posts_per_day:
-        logger.warning(
-            "rate_limit_exceeded",
-            extra={
-                "posts_today": state.counters["posts_today"],
-                "max_posts": config.rate_limits.max_posts_per_day,
-            },
-        )
-        return
+def create_job_wrapper(job_func, config: BotConfig, env_settings: dict):
+    """Create a wrapper function for a job that passes config and env_settings.
 
-    # Initialize LLM client with provider support
-    llm_client = LLMClient(
-        config=config,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
+    Args:
+        job_func: Job function to wrap
+        config: Bot configuration
+        env_settings: Environment settings dictionary
+
+    Returns:
+        Wrapped function that can be called without arguments
+    """
+    return lambda: job_func(config, env_settings)
+
+
+def main():
+    """Main entry point for the bot scheduler."""
+    # Load environment variables
+    load_dotenv()
+
+    # Load configuration
+    config_path = Path("config/config.yaml")
+    config = BotConfig.load(config_path)
+
+    logger.info("bot_starting", extra={"config_path": str(config_path)})
+
+    # Load and validate environment settings
+    env_settings = load_env_settings()
+    try:
+        validate_env_settings(env_settings)
+    except ValueError as e:
+        logger.error("configuration_error", extra={"error": str(e)})
+        sys.exit(1)
+
+    # Initialize scheduler
+    scheduler = BotScheduler(config)
+
+    # Setup jobs with wrappers that pass config and env_settings
+    scheduler.setup_posting_job(
+        create_job_wrapper(post_autonomous_tweet, config, env_settings)
+    )
+    scheduler.setup_reading_job(
+        create_job_wrapper(read_frontpage_posts, config, env_settings)
+    )
+    scheduler.setup_notifications_job(
+        create_job_wrapper(check_notifications, config, env_settings)
     )
 
-    # Get system prompt
-    system_prompt = config.get_system_prompt()
+    # Setup signal handlers for graceful shutdown
+    def signal_handler(signum, frame):
+        """Handle shutdown signals."""
+        logger.info("shutdown_signal_received", extra={"signal": signum})
+        scheduler.shutdown()
+        sys.exit(0)
 
-    # Generate tweet
-    logger.info("generating_tweet")
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Start scheduler
     try:
-        tweet_text = await llm_client.generate_tweet(system_prompt)
-        logger.info("tweet_generated", extra={"length": len(tweet_text)})
-    except AuthenticationError as e:
-        logger.error(
-            "tweet_generation_failed_auth",
-            extra={
-                "error": str(e),
-                "message": "Authentication failed. Please check your OPENAI_API_KEY in .env file.",
-            },
-        )
-        return
-    except RateLimitError as e:
-        logger.error(
-            "tweet_generation_failed_rate_limit",
-            extra={
-                "error": str(e),
-                "message": "Rate limit or quota exceeded. Please check your OpenAI account billing or wait before retrying.",
-            },
-        )
-        return
-    except Exception as e:
-        logger.error("tweet_generation_failed", extra={"error": str(e)}, exc_info=True)
-        return
+        scheduler.start()
 
-    # Validate tweet
-    print(tweet_text)
-    is_valid, error_message = await llm_client.validate_tweet(tweet_text)
-    if not is_valid:
-        logger.error("tweet_validation_failed", extra={"error": error_message})
-        return
+        # Keep main process alive
+        logger.info("scheduler_running", extra={"message": "Press Ctrl+C to stop"})
+        while scheduler.is_running:
+            try:
+                import time
 
-    logger.info("tweet_validated", extra={"length": len(tweet_text)})
-
-    # Initialize browser driver
-    logger.info("initializing_browser")
-    driver = None
-    try:
-        driver = create_driver(config)
-
-        # Try to load cookies first
-        cookies_loaded = load_cookies(driver, config)
-        if not cookies_loaded:
-            # Login if cookies not available
-            logger.info("logging_in")
-            login_success = login(driver, twitter_username, twitter_password, config)
-            if not login_success:
-                logger.error("login_failed")
-                return
-
-            # Save cookies after successful login
-            save_cookies(driver)
-
-        # Post tweet
-        logger.info("posting_tweet")
-        post_success = post_tweet(driver, tweet_text, config)
-        if not post_success:
-            logger.error("tweet_post_failed")
-            return
-
-        # Update state
-        state.counters["posts_today"] += 1
-        state.last_post_time = datetime.now(datetime.UTC)
-
-        # Save state
-        await save_state(state)
-        logger.info(
-            "state_updated", extra={"posts_today": state.counters["posts_today"]}
-        )
-
-        logger.info("bot_completed_successfully")
+                time.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("keyboard_interrupt_received")
+                break
 
     except Exception as e:
-        logger.error("bot_error", extra={"error": str(e)}, exc_info=True)
+        logger.error("scheduler_error", extra={"error": str(e)}, exc_info=True)
         raise
 
     finally:
-        if driver:
-            driver.quit()
-            logger.info("browser_closed")
+        scheduler.shutdown()
+        logger.info("bot_shutdown_complete")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
