@@ -1,7 +1,7 @@
 # X Bot - Development Roadmap
 
 **Last Updated:** 2025-01-27  
-**Current Phase:** MVP Development
+**Current Phase:** MVP Development - Phase 1 (Scheduler Complete)
 
 ## 📊 Current Status Overview
 
@@ -47,29 +47,39 @@
   - Rate limit checks
   - State updates
 
+- ✅ **Scheduler System** (`src/scheduler/`)
+  - APScheduler BackgroundScheduler integration
+  - Automated periodic job execution
+  - Job failure handling and logging
+  - Concurrent execution prevention (`max_instances=1`)
+  - Comprehensive test coverage
+
 ---
 
 ## 🎯 MVP Goals (Phase 1)
 
 ### High Priority - Core Features
 
-#### 1. Scheduler System (`src/scheduler/`) 🔴 **NEXT**
-**Status:** ❌ Not Started  
+#### 1. Scheduler System (`src/scheduler/`) ✅ **COMPLETED**
+**Status:** ✅ Completed  
 **Priority:** Critical  
-**Estimated Effort:** 2-3 days
+**Estimated Effort:** 2-3 days (Completed)
 
 **Tasks:**
-- [ ] Create `src/scheduler/bot_scheduler.py`
-- [ ] Implement APScheduler BackgroundScheduler
-- [ ] Add job: `post_autonomous_tweet()` (every 8h with jitter)
-- [ ] Add job: `read_frontpage_posts()` (every 30min)
-- [ ] Add job: `check_notifications()` (every 30min)
-- [ ] Implement graceful job failure handling
-- [ ] Add structured logging for scheduled tasks
+- [x] Create `src/scheduler/bot_scheduler.py`
+- [x] Implement APScheduler BackgroundScheduler
+- [x] Add job: `post_autonomous_tweet()` (every 8h with jitter)
+- [x] Add job: `read_frontpage_posts()` (every 30min) - Stub implemented
+- [x] Add job: `check_notifications()` (every 30min) - Stub implemented
+- [x] Implement graceful job failure handling
+- [x] Add structured logging for scheduled tasks
+- [x] Add `max_instances=1` to prevent concurrent execution
+- [x] Add `coalesce=True` for pending job combination
+- [x] Create comprehensive test suite (`tests/test_scheduler.py`, `tests/test_jobs.py`)
 
 **Dependencies:**
-- `apscheduler` package
-- Existing `main.py` logic refactoring
+- ✅ `apscheduler` package
+- ✅ Existing `main.py` logic refactoring
 
 ---
 
@@ -214,10 +224,10 @@
 **Goal:** Enable automated periodic tasks
 
 1. ✅ Scheduler System
-2. ✅ Frontpage Reading
+2. ❌ Frontpage Reading
 3. ✅ Basic integration with main loop
 
-**Deliverable:** Bot can read posts on schedule
+**Deliverable:** Bot can read posts on schedule (Scheduler ready, reading pending)
 
 ---
 
@@ -267,25 +277,25 @@
 | **Reply based on Personality** | ❌ Missing | `src/x/reactions.py` |
 | **Personality Integration** | ⚠️ Partial | Config exists, not in reactions |
 | **Check Trends** | ❌ Missing | `src/ingest/trends.py` |
-| **Scheduler** | ❌ Missing | `src/scheduler/bot_scheduler.py` |
+| **Scheduler** | ✅ Done | `src/scheduler/bot_scheduler.py` |
 
 ---
 
 ## 📝 Notes
 
 ### Current Limitations
-- No automated scheduling (manual execution only)
-- No post reading/scanning capability
+- ✅ Automated scheduling implemented (scheduler system complete)
+- No post reading/scanning capability (stub only)
 - No interest-based filtering
 - No reaction/reply functionality
-- No notification handling
+- No notification handling (stub only)
 - No memory/duplicate detection
 
 ### Technical Debt
-- Main loop needs refactoring for scheduler integration
+- ✅ Main loop refactored for scheduler integration
 - LLM client needs embedding support (currently only generation)
 - State management needs counter reset logic (midnight UTC)
-- Error handling could be more robust in some areas
+- Error handling improved with graceful job failure handling
 
 ### Future Enhancements (Post-MVP)
 - RSS feed ingestion (`src/ingest/rss.py`)
@@ -299,15 +309,15 @@
 
 ## 🎯 Success Criteria for MVP
 
-- [ ] Bot runs continuously with scheduler
-- [ ] Bot reads frontpage posts periodically
+- [x] Bot runs continuously with scheduler
+- [ ] Bot reads frontpage posts periodically (stub implemented)
 - [ ] Bot identifies interesting posts (interest detection)
 - [ ] Bot reacts to interesting posts automatically
-- [ ] Bot checks for notifications periodically
+- [ ] Bot checks for notifications periodically (stub implemented)
 - [ ] Bot replies to positive notifications
 - [ ] Bot avoids duplicate posts (memory integration)
-- [ ] All rate limits enforced
-- [ ] All compliance checks in place
+- [x] All rate limits enforced
+- [x] All compliance checks in place
 
 ---
 

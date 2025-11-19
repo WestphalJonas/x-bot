@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +13,7 @@ from src.state.manager import load_state, save_state
 from src.x.auth import load_cookies, login, save_cookies
 from src.x.driver import create_driver
 from src.x.posting import post_tweet
+from src.x.reading import read_frontpage_posts as read_posts_from_frontpage
 
 logger = logging.getLogger(__name__)
 
@@ -182,26 +182,20 @@ async def _post_autonomous_tweet_async(
 
 
 def read_frontpage_posts(config: BotConfig, env_settings: dict[str, Any]) -> None:
-    """Read frontpage posts (scheduled job - stub implementation).
+    """Read frontpage posts (scheduled job).
 
-    This will be implemented in Phase 1 (Frontpage Reading).
+    This function wraps async operations for APScheduler compatibility.
 
     Args:
         config: Bot configuration
-        env_settings: Dictionary with environment variables
+        env_settings: Dictionary with environment variables (API keys, credentials)
     """
     job_id = "read_posts"
     logger.info("job_started", extra={"job_id": job_id})
 
     try:
-        logger.info(
-            "feature_not_implemented",
-            extra={
-                "job_id": job_id,
-                "feature": "read_frontpage_posts",
-                "phase": "Phase 1 - Frontpage Reading",
-            },
-        )
+        # Run async operations in event loop
+        asyncio.run(_read_frontpage_posts_async(config, env_settings))
         logger.info("job_completed", extra={"job_id": job_id})
 
     except Exception as e:
@@ -214,6 +208,78 @@ def read_frontpage_posts(config: BotConfig, env_settings: dict[str, Any]) -> Non
             },
             exc_info=True,
         )
+
+
+async def _read_frontpage_posts_async(
+    config: BotConfig, env_settings: dict[str, Any]
+) -> None:
+    """Async implementation of frontpage post reading.
+
+    Args:
+        config: Bot configuration
+        env_settings: Dictionary with environment variables
+    """
+    # Get environment variables
+    twitter_username = env_settings.get("TWITTER_USERNAME")
+    twitter_password = env_settings.get("TWITTER_PASSWORD")
+
+    if not twitter_username:
+        raise ValueError("TWITTER_USERNAME environment variable is required")
+    if not twitter_password:
+        raise ValueError("TWITTER_PASSWORD environment variable is required")
+
+    # Initialize browser driver
+    logger.info("initializing_browser")
+    driver = None
+    try:
+        driver = create_driver(config)
+
+        # Try to load cookies first
+        cookies_loaded = load_cookies(driver, config)
+        if not cookies_loaded:
+            # Login if cookies not available
+            logger.info("logging_in")
+            login_success = login(driver, twitter_username, twitter_password, config)
+            if not login_success:
+                logger.error("login_failed")
+                raise RuntimeError("Login failed")
+
+            # Save cookies after successful login
+            save_cookies(driver)
+
+        # Read posts
+        logger.info("reading_frontpage_posts")
+        posts = read_posts_from_frontpage(driver, config, count=10)
+
+        logger.info(
+            "posts_read",
+            extra={
+                "count": len(posts),
+                "posts": [
+                    {
+                        "post_id": post.post_id,
+                        "username": post.username,
+                        "display_name": post.display_name,
+                        "text_length": len(post.text),
+                        "likes": post.likes,
+                        "retweets": post.retweets,
+                        "replies": post.replies,
+                    }
+                    for post in posts
+                ],
+            },
+        )
+
+        logger.info("reading_completed_successfully")
+
+    except Exception as e:
+        logger.error("reading_error", extra={"error": str(e)}, exc_info=True)
+        raise
+
+    finally:
+        if driver:
+            driver.quit()
+            logger.info("browser_closed")
 
 
 def check_notifications(config: BotConfig, env_settings: dict[str, Any]) -> None:

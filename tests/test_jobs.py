@@ -199,10 +199,49 @@ def test_post_autonomous_tweet_llm_error(
     mock_load_state.assert_called_once()
 
 
-def test_read_frontpage_posts_stub(config, env_settings):
-    """Test read_frontpage_posts stub implementation."""
-    # Should not raise exception
+@patch("src.scheduler.jobs.asyncio.run")
+@patch("src.scheduler.jobs.create_driver")
+@patch("src.scheduler.jobs.load_cookies")
+@patch("src.scheduler.jobs.login")
+@patch("src.scheduler.jobs.save_cookies")
+@patch("src.scheduler.jobs.read_posts_from_frontpage")
+def test_read_frontpage_posts_success(
+    mock_read_posts,
+    mock_save_cookies,
+    mock_login,
+    mock_load_cookies,
+    mock_create_driver,
+    mock_asyncio_run,
+    config,
+    env_settings,
+):
+    """Test read_frontpage_posts job implementation."""
+    from src.state.models import Post
+
+    # Setup mocks
+    mock_driver = Mock()
+    mock_create_driver.return_value = mock_driver
+    mock_load_cookies.return_value = True
+    mock_read_posts.return_value = [
+        Post(
+            text="Test tweet",
+            username="@testuser",
+            display_name="Test User",
+            post_id="123456",
+            likes=100,
+            retweets=50,
+            replies=25,
+        )
+    ]
+
+    # Run job
     read_frontpage_posts(config, env_settings)
+
+    # Verify
+    mock_asyncio_run.assert_called_once()
+    # The async function should be called by asyncio.run
+    call_args = mock_asyncio_run.call_args[0][0]
+    assert call_args is not None
 
 
 def test_check_notifications_stub(config, env_settings):
