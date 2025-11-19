@@ -12,10 +12,10 @@ class RateLimitsConfig(BaseModel):
     """Rate limiting configuration."""
 
     max_posts_per_day: int = Field(
-        default=5, ge=1, le=10, description="Max posts per day"
+        default=5, ge=1, description="Max posts per day"
     )
     max_replies_per_day: int = Field(
-        default=20, ge=1, le=50, description="Max replies per day"
+        default=20, ge=1, description="Max replies per day"
     )
     reset_time_utc: str = Field(
         default="00:00", description="UTC time to reset counters (HH:MM)"

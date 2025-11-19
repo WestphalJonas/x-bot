@@ -959,3 +959,36 @@ Before submitting code, verify:
 - Use standard Selenium
 - Skip type hints
 - Hardcode model names, thresholds, or intervals (use config)
+
+## Development Roadmap
+
+### Roadmap Tracking
+
+ALWAYS refer to `ROADMAP.md` for current development status and priorities.
+
+The roadmap tracks:
+- ✅ **Completed features** - What's already implemented
+- ❌ **Missing features** - What needs to be built
+- 🔴 **High priority** - Critical MVP features
+- 🟡 **Medium priority** - Important but not blocking
+- 🟢 **Low priority** - Nice-to-have features
+
+### Current MVP Focus
+
+The MVP is organized into 4 phases:
+
+1. **Phase 1: Scheduler & Reading** - Enable automated periodic tasks
+2. **Phase 2: Interest & Reactions** - Enable intelligent post reactions
+3. **Phase 3: Notifications & Intent** - Enable reply handling
+4. **Phase 4: Memory & Enhancement** - Add memory and duplicate detection
+
+### Roadmap Updates
+
+MUST update `ROADMAP.md` when:
+- Completing a feature (change ❌ to ✅)
+- Starting work on a feature (add in-progress status)
+- Changing priorities
+- Adding new features or requirements
+- Completing a phase
+
+The roadmap serves as the single source of truth for development progress and should be consulted before starting new work.
