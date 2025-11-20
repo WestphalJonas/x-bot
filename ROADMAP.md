@@ -1,7 +1,7 @@
 # X Bot - Development Roadmap
 
 **Last Updated:** 2025-01-27  
-**Current Phase:** MVP Development - Phase 1 (Scheduler Complete)
+**Current Phase:** MVP Development - Phase 1 (Scheduler & Reading Complete)
 
 ## 📊 Current Status Overview
 
@@ -40,6 +40,13 @@
   - Tweet posting via Selenium
   - Multiple selector fallbacks
   - Human-like typing simulation
+
+- ✅ **Reading** (`src/x/reading.py`)
+  - Frontpage post reading and extraction
+  - Post content, author info (username/display_name), engagement metrics
+  - Timestamp and URL extraction
+  - Dynamic content loading with scrolling
+  - Duplicate post filtering
 
 #### Main Loop
 - ✅ **Basic Bot Flow** (`main.py`)
@@ -83,22 +90,26 @@
 
 ---
 
-#### 2. Frontpage Reading (`src/x/reading.py`) 🔴 **HIGH**
-**Status:** ❌ Not Started  
+#### 2. Frontpage Reading (`src/x/reading.py`) ✅ **COMPLETED**
+**Status:** ✅ Completed  
 **Priority:** Critical  
-**Estimated Effort:** 2-3 days
+**Estimated Effort:** 2-3 days (Completed)
 
 **Tasks:**
-- [ ] Create `src/x/reading.py`
-- [ ] Implement `read_frontpage_posts(driver, count=10)` function
-- [ ] Extract post content (text, author, engagement metrics)
-- [ ] Handle dynamic content loading (scroll, wait for elements)
-- [ ] Create `Post` Pydantic model for structured data
-- [ ] Add error handling and retry logic
+- [x] Create `src/x/reading.py`
+- [x] Implement `read_frontpage_posts(driver, count=10)` function
+- [x] Extract post content (text, author username/display_name, engagement metrics)
+- [x] Handle dynamic content loading (scroll, wait for elements)
+- [x] Create `Post` Pydantic model for structured data
+- [x] Add error handling and retry logic
+- [x] Extract post timestamps from time elements
+- [x] Extract post URLs (filtering out analytics links)
+- [x] Implement duplicate post filtering by post ID
+- [x] Add comprehensive test coverage
 
 **Dependencies:**
-- Selenium driver
-- Post data model
+- ✅ Selenium driver
+- ✅ Post data model
 
 ---
 
@@ -218,16 +229,82 @@
 
 ---
 
+#### 9. Token Counter & Analytics (`src/core/analytics.py`) 🟡 **MEDIUM**
+**Status:** ❌ Not Started  
+**Priority:** Medium  
+**Estimated Effort:** 1-2 days
+
+**Tasks:**
+- [ ] Create `src/core/analytics.py`
+- [ ] Implement token counting for all LLM calls
+- [ ] Track token usage per provider (OpenAI, OpenRouter, etc.)
+- [ ] Store token metrics in state/database
+- [ ] Track costs per provider (if available)
+- [ ] Add token usage logging with structured context
+
+**Dependencies:**
+- LLM Client
+- State management or database
+
+---
+
+#### 10. Tweet Re-Evaluation Before Posting (`src/core/evaluation.py`) 🟡 **MEDIUM**
+**Status:** ❌ Not Started  
+**Priority:** Medium  
+**Estimated Effort:** 1-2 days
+
+**Tasks:**
+- [ ] Create `src/core/evaluation.py`
+- [ ] Implement `re_evaluate_tweet(tweet_text: str, config: BotConfig, llm: LLMClient) -> tuple[bool, str]`
+- [ ] Use LLM to evaluate tweet against personality/topics
+- [ ] Check if tweet is worth posting (quality, relevance, alignment)
+- [ ] Return evaluation result (pass/fail) and reasoning
+- [ ] Integrate into posting flow before final submission
+- [ ] Log failed evaluations for dashboard analytics
+
+**Dependencies:**
+- LLM Client
+- Personality config
+- Posting infrastructure
+
+---
+
+#### 11. Web Dashboard (`src/web/`) 🟡 **MEDIUM**
+**Status:** ❌ Not Started  
+**Priority:** Medium  
+**Estimated Effort:** 3-4 days
+
+**Tasks:**
+- [ ] Create `src/web/` directory structure
+- [ ] Set up FastAPI application (`src/web/app.py`)
+- [ ] Create API endpoints for dashboard data
+- [ ] Implement dashboard frontend (HTML/JS or React)
+- [ ] Add endpoint: `/api/posts/read` - Last read tweets overview
+- [ ] Add endpoint: `/api/posts/written` - Last written/posted tweets
+- [ ] Add endpoint: `/api/posts/rejected` - Tweets that didn't pass evaluation
+- [ ] Add endpoint: `/api/analytics/tokens` - Token usage analytics
+- [ ] Add endpoint: `/api/state` - Current bot state
+- [ ] Integrate with existing state management
+- [ ] Add authentication/security for dashboard access
+
+**Dependencies:**
+- FastAPI package
+- Token counter/analytics
+- Tweet re-evaluation (for rejected tweets tracking)
+- State management
+
+---
+
 ## 📅 Implementation Phases
 
 ### Phase 1: Scheduler & Reading (Week 1)
 **Goal:** Enable automated periodic tasks
 
 1. ✅ Scheduler System
-2. ❌ Frontpage Reading
+2. ✅ Frontpage Reading
 3. ✅ Basic integration with main loop
 
-**Deliverable:** Bot can read posts on schedule (Scheduler ready, reading pending)
+**Deliverable:** Bot can read posts on schedule ✅ Complete
 
 ---
 
@@ -269,7 +346,7 @@
 | Flowchart Step | Status | Implementation |
 |----------------|--------|----------------|
 | **Start** | ✅ Done | `main.py` |
-| **Random Read X posts** | ❌ Missing | `src/x/reading.py` |
+| **Random Read X posts** | ✅ Done | `src/x/reading.py` |
 | **Interest Check** | ❌ Missing | `src/core/interest.py` |
 | **Write Reaction** | ❌ Missing | `src/x/reactions.py` |
 | **Check Replies/Notifications** | ❌ Missing | `src/x/notifications.py` |
@@ -285,7 +362,7 @@
 
 ### Current Limitations
 - ✅ Automated scheduling implemented (scheduler system complete)
-- No post reading/scanning capability (stub only)
+- ✅ Post reading/scanning capability implemented
 - No interest-based filtering
 - No reaction/reply functionality
 - No notification handling (stub only)
@@ -296,13 +373,15 @@
 - LLM client needs embedding support (currently only generation)
 - State management needs counter reset logic (midnight UTC)
 - Error handling improved with graceful job failure handling
+- Token counting not yet implemented (needed for analytics)
+- Tweet re-evaluation before posting not implemented
 
 ### Future Enhancements (Post-MVP)
 - RSS feed ingestion (`src/ingest/rss.py`)
 - Event detection (`src/ingest/events.py`)
 - Advanced monitoring (`src/monitoring/`)
 - SQLite/PostgreSQL migration for state
-- Web dashboard for monitoring
+- Web dashboard for monitoring (FastAPI)
 - Multi-account support
 
 ---
@@ -310,7 +389,7 @@
 ## 🎯 Success Criteria for MVP
 
 - [x] Bot runs continuously with scheduler
-- [ ] Bot reads frontpage posts periodically (stub implemented)
+- [x] Bot reads frontpage posts periodically
 - [ ] Bot identifies interesting posts (interest detection)
 - [ ] Bot reacts to interesting posts automatically
 - [ ] Bot checks for notifications periodically (stub implemented)
