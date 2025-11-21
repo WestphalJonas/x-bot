@@ -1,12 +1,12 @@
 rate_limits:
-  max_posts_per_day: 5
-  max_replies_per_day: 20
+  max_posts_per_day: 10  # Increased for testing
+  max_replies_per_day: 50  # Increased for testing
   reset_time_utc: "00:00"
 
 selenium:
-  min_delay_seconds: 5.0
-  max_delay_seconds: 15.0
-  headless: false
+  min_delay_seconds: 1.0  # Reduced from 5.0 for faster debugging
+  max_delay_seconds: 3.0  # Reduced from 15.0 for faster debugging
+  headless: false  # Keep visible for debugging
   user_agent_rotation: true
 
 llm:
@@ -23,10 +23,11 @@ llm:
   use_fallback: true
 
 scheduler:
-  post_interval_hours: 8.0
-  post_jitter_hours: 1.0
-  mention_check_minutes: 30
-  event_check_minutes: 15
+  post_interval_hours: 0.1  # 6 minutes (reduced from 8.0 hours)
+  post_jitter_hours: 0.01  # ~36 seconds (reduced from 1.0 hour)
+  mention_check_minutes: 1  # 1 minute (reduced from 30 minutes)
+  reading_check_minutes: 1  # 1 minute (reduced from 30 minutes)
+  event_check_minutes: 1  # 1 minute (reduced from 15 minutes)
 
 personality:
   tone: "professional"

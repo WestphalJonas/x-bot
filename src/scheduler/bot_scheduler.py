@@ -89,7 +89,7 @@ class BotScheduler:
             func: Function to execute
             **kwargs: Additional arguments to pass to add_job
         """
-        interval_minutes = self.config.scheduler.mention_check_minutes
+        interval_minutes = self.config.scheduler.reading_check_minutes
         trigger = IntervalTrigger(minutes=interval_minutes)
         self.add_job(func=func, job_id="read_posts", trigger=trigger, **kwargs)
 

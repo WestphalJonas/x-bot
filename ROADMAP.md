@@ -1,7 +1,7 @@
 # X Bot - Development Roadmap
 
 **Last Updated:** 2025-01-27  
-**Current Phase:** MVP Development - Phase 1 (Scheduler & Reading Complete)
+**Current Phase:** MVP Development - Phase 2 (Interest Detection Integrated, Queue Ready for Reactions)
 
 ## 📊 Current Status Overview
 
@@ -49,6 +49,13 @@
   - Duplicate post filtering
   - Post type detection (text-only, media-only, retweets, quoted tweets)
   - Skip non-text posts (media-only, retweets without text)
+
+- ✅ **Interest Detection** (`src/core/interest.py`)
+  - LLM-based post evaluation against bot personality
+  - Match/No Match decision with structured logging
+  - Retry logic with tenacity for robustness
+  - Token usage tracking for analytics
+  - Comprehensive test coverage
 
 #### Main Loop
 - ✅ **Basic Bot Flow** (`main.py`)
@@ -108,7 +115,7 @@
 - [x] Extract post URLs (filtering out analytics links)
 - [x] Implement duplicate post filtering by post ID
 - [x] Add comprehensive test coverage
-- [ ] Detect different post types (text-only, media-only, retweets, quoted tweets)
+- [X] Detect different post types (text-only, media-only, retweets, quoted tweets)
 - [ ] Skip non-text posts (media-only, retweets without text) during reading
 - [ ] Extract media information (images, videos) for future use
 - [ ] Handle quoted tweets and retweets properly
@@ -119,17 +126,24 @@
 
 ---
 
-#### 3. Interest Detection (`src/core/interest.py`) 🔴 **HIGH**
-**Status:** ❌ Not Started  
+#### 3. Interest Detection (`src/core/interest.py`) ✅ **COMPLETED**
+**Status:** ✅ Completed  
 **Priority:** Critical  
-**Estimated Effort:** 1-2 days
+**Estimated Effort:** 1-2 days (Completed)
 
 **Tasks:**
-- [ ] Create `src/core/interest.py`
-- [ ] Implement `check_interest(post: Post, config: BotConfig, llm: LLMClient) -> bool`
-- [ ] Use LLM to evaluate if post matches personality/topics
-- [ ] Return Match/No Match decision
-- [ ] Add confidence scoring (optional)
+- [x] Create `src/core/interest.py`
+- [x] Implement `check_interest(post: Post, config: BotConfig, llm: LLMClient) -> bool`
+- [x] Use LLM to evaluate if post matches personality/topics
+- [x] Return Match/No Match decision
+- [x] Add retry logic with tenacity
+- [x] Add structured logging with token usage
+- [x] Add comprehensive test coverage (`tests/test_interest.py`)
+- [x] Integrate into scheduler reading job
+- [x] Add `is_interesting` flag to Post model
+- [x] Create interesting posts queue in AgentState
+- [x] Add structured logging for dashboard analytics
+- [ ] Add confidence scoring (optional, future enhancement)
 
 **Dependencies:**
 - LLM Client
@@ -317,9 +331,9 @@
 ### Phase 2: Interest & Reactions (Week 1-2)
 **Goal:** Enable intelligent post reactions
 
-1. ✅ Interest Detection
-2. ✅ Reaction Writing
-3. ✅ Integration with scheduler
+1. ✅ Interest Detection (module complete, integrated into reading job)
+2. ❌ Reaction Writing
+3. ⚠️ Integration with scheduler (reading job integrated, reactions pending)
 
 **Deliverable:** Bot can react to interesting posts automatically
 
@@ -353,7 +367,7 @@
 |----------------|--------|----------------|
 | **Start** | ✅ Done | `main.py` |
 | **Random Read X posts** | ✅ Done | `src/x/reading.py` |
-| **Interest Check** | ❌ Missing | `src/core/interest.py` |
+| **Interest Check** | ✅ Done | `src/core/interest.py` (integration pending) |
 | **Write Reaction** | ❌ Missing | `src/x/reactions.py` |
 | **Check Replies/Notifications** | ❌ Missing | `src/x/notifications.py` |
 | **Positive Intent Check** | ❌ Missing | `src/core/intent.py` |
@@ -370,8 +384,11 @@
 - ✅ Automated scheduling implemented (scheduler system complete)
 - ✅ Post reading/scanning capability implemented
 - ✅ Post type detection implemented (skips non-text posts)
-- No interest-based filtering
-- No reaction/reply functionality
+- ✅ Interest detection integrated into reading job
+- ✅ Interesting posts queue implemented (max 50 posts)
+- ✅ Structured logging for dashboard analytics
+- ⚠️ Reading job has dedicated `reading_check_minutes` config field
+- No reaction/reply functionality (queue ready for processing)
 - No notification handling (stub only)
 - No memory/duplicate detection
 - Media-only posts are skipped (no text to evaluate)
@@ -399,8 +416,8 @@
 
 - [x] Bot runs continuously with scheduler
 - [x] Bot reads frontpage posts periodically
-- [ ] Bot identifies interesting posts (interest detection)
-- [ ] Bot reacts to interesting posts automatically
+- [x] Bot identifies interesting posts (interest detection integrated, queue implemented)
+- [ ] Bot reacts to interesting posts automatically (queue ready for processing)
 - [ ] Bot checks for notifications periodically (stub implemented)
 - [ ] Bot replies to positive notifications
 - [ ] Bot avoids duplicate posts (memory integration)

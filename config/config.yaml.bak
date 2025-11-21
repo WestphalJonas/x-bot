@@ -1,0 +1,40 @@
+rate_limits:
+  max_posts_per_day: 5
+  max_replies_per_day: 20
+  reset_time_utc: "00:00"
+
+selenium:
+  min_delay_seconds: 5.0
+  max_delay_seconds: 15.0
+  headless: false
+  user_agent_rotation: true
+
+llm:
+  provider: "openrouter"
+  #fallback_providers:
+   # - "openai"
+   # - "google"
+  model: "openai/gpt-4o-mini"
+  embedding_model: "text-embedding-3-small"
+  embedding_provider: "openai"
+  max_tokens: 150
+  temperature: 0.7
+  similarity_threshold: 0.85
+  use_fallback: true
+
+scheduler:
+  post_interval_hours: 8.0
+  post_jitter_hours: 1.0
+  mention_check_minutes: 30
+  reading_check_minutes: 30
+  event_check_minutes: 15
+
+personality:
+  tone: "professional"
+  topics:
+    - "AI"
+    - "technology"
+  style: "concise"
+  min_tweet_length: 180
+  max_tweet_length: 280
+

@@ -26,6 +26,10 @@ class AgentState(BaseModel):
     mood: str = Field(
         default="neutral", description="Current mood state (for future use)"
     )
+    interesting_posts_queue: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Queue of interesting posts for later reaction processing (max 50 posts)",
+    )
 
 
 class Post(BaseModel):
@@ -48,3 +52,7 @@ class Post(BaseModel):
     replies: int = Field(default=0, ge=0, description="Reply count")
     timestamp: datetime | None = Field(default=None, description="Post timestamp")
     url: str | None = Field(default=None, description="Post URL")
+    is_interesting: bool | None = Field(
+        default=None,
+        description="Whether post matches bot's interests (None = not evaluated yet)",
+    )

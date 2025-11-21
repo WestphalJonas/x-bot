@@ -125,7 +125,7 @@ def main():
         scheduler.start()
 
         # Keep main process alive
-        logger.info("scheduler_running", extra={"message": "Press Ctrl+C to stop"})
+        logger.info("scheduler_running", extra={"info": "Press Ctrl+C to stop"})
         while scheduler.is_running:
             try:
                 import time

@@ -11,9 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 class RateLimitsConfig(BaseModel):
     """Rate limiting configuration."""
 
-    max_posts_per_day: int = Field(
-        default=5, ge=1, description="Max posts per day"
-    )
+    max_posts_per_day: int = Field(default=5, ge=1, description="Max posts per day")
     max_replies_per_day: int = Field(
         default=20, ge=1, description="Max replies per day"
     )
@@ -26,10 +24,10 @@ class SeleniumConfig(BaseModel):
     """Selenium/browser automation configuration."""
 
     min_delay_seconds: float = Field(
-        default=5.0, ge=1.0, description="Min delay between actions"
+        default=5.0, ge=0.1, description="Min delay between actions"
     )
     max_delay_seconds: float = Field(
-        default=15.0, ge=5.0, description="Max delay between actions"
+        default=15.0, ge=0.1, description="Max delay between actions"
     )
     headless: bool = Field(
         default=True,
@@ -91,16 +89,19 @@ class SchedulerConfig(BaseModel):
     """Task scheduling configuration."""
 
     post_interval_hours: float = Field(
-        default=8.0, ge=1.0, description="Average hours between posts"
+        default=8.0, ge=0.01, description="Average hours between posts"
     )
     post_jitter_hours: float = Field(
         default=1.0, ge=0.0, description="Random jitter in hours (±)"
     )
     mention_check_minutes: int = Field(
-        default=30, ge=5, description="Minutes between mention checks"
+        default=30, ge=1, description="Minutes between mention checks"
+    )
+    reading_check_minutes: int = Field(
+        default=30, ge=1, description="Minutes between frontpage reading checks"
     )
     event_check_minutes: int = Field(
-        default=15, ge=5, description="Minutes between event checks"
+        default=15, ge=1, description="Minutes between event checks"
     )
 
 
