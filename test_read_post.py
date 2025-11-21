@@ -90,6 +90,7 @@ def main():
                 "post_id": post.post_id,
                 "username": post.username,
                 "display_name": post.display_name,
+                "post_type": post.post_type,
                 "text_length": len(post.text),
                 "likes": post.likes,
                 "retweets": post.retweets,
@@ -103,6 +104,7 @@ def main():
             "username": post.username,
             "display_name": post.display_name,
             "post_id": post.post_id,
+            "post_type": post.post_type,
             "likes": post.likes,
             "retweets": post.retweets,
             "replies": post.replies,
@@ -121,6 +123,7 @@ def main():
         print(f"  Username: {post.username}")
         print(f"  Display Name: {post.display_name}")
         print(f"  Post ID: {post.post_id}")
+        print(f"  Post Type: {post.post_type}")
         print(
             f"  Text: {post.text[:100]}..."
             if len(post.text) > 100

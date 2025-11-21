@@ -227,11 +227,8 @@ class LLMClient:
         if not tweet.strip():
             return False, "Tweet is empty"
 
-        # Check for reasonable content (not just whitespace/punctuation)
-        if len(tweet.strip()) < 10:
-            return False, "Tweet content too short"
-
         # On-brand check using LLM
+        # TODO: Implement at 10. src/core/evaluation.py
         try:
             is_on_brand = await self._check_brand_alignment(tweet)
             if not is_on_brand:

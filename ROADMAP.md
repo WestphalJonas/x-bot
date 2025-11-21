@@ -47,6 +47,8 @@
   - Timestamp and URL extraction
   - Dynamic content loading with scrolling
   - Duplicate post filtering
+  - Post type detection (text-only, media-only, retweets, quoted tweets)
+  - Skip non-text posts (media-only, retweets without text)
 
 #### Main Loop
 - ✅ **Basic Bot Flow** (`main.py`)
@@ -106,6 +108,10 @@
 - [x] Extract post URLs (filtering out analytics links)
 - [x] Implement duplicate post filtering by post ID
 - [x] Add comprehensive test coverage
+- [ ] Detect different post types (text-only, media-only, retweets, quoted tweets)
+- [ ] Skip non-text posts (media-only, retweets without text) during reading
+- [ ] Extract media information (images, videos) for future use
+- [ ] Handle quoted tweets and retweets properly
 
 **Dependencies:**
 - ✅ Selenium driver
@@ -363,10 +369,13 @@
 ### Current Limitations
 - ✅ Automated scheduling implemented (scheduler system complete)
 - ✅ Post reading/scanning capability implemented
+- ✅ Post type detection implemented (skips non-text posts)
 - No interest-based filtering
 - No reaction/reply functionality
 - No notification handling (stub only)
 - No memory/duplicate detection
+- Media-only posts are skipped (no text to evaluate)
+- Retweets without text are skipped
 
 ### Technical Debt
 - ✅ Main loop refactored for scheduler integration

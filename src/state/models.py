@@ -39,6 +39,10 @@ class Post(BaseModel):
         default=None, description="Author display name/account name"
     )
     post_id: str | None = Field(default=None, description="Post ID if extractable")
+    post_type: str = Field(
+        default="text_only",
+        description="Type of post: text_only, text_with_media, media_only, retweet, quoted, unknown",
+    )
     likes: int = Field(default=0, ge=0, description="Like count")
     retweets: int = Field(default=0, ge=0, description="Retweet count")
     replies: int = Field(default=0, ge=0, description="Reply count")

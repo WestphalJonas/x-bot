@@ -4,7 +4,6 @@ import logging
 import re
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -16,8 +15,6 @@ from src.core.config import BotConfig
 from src.state.models import Post
 from src.x.driver import human_delay
 
-if TYPE_CHECKING:
-    import undetected_chromedriver as uc
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +59,202 @@ def _extract_number_from_text(text: str | None) -> int:
     return 0
 
 
+def _detect_post_type(post_element) -> str:
+    """Detect the type of post (text-only, media-only, retweet, quoted).
+
+    Based on actual Twitter/X HTML structure:
+    - Quoted tweets: nested article[data-testid="tweet"] AND quote labels ("Zitat", "Quote")
+    - Text with media: data-testid="tweetPhoto" or data-testid="videoComponent" in main post
+    - Text-only: text content without media elements
+
+    Args:
+        post_element: Selenium WebElement representing a post
+
+    Returns:
+        String indicating post type: "text_only", "text_with_media", "media_only", "retweet", "quoted", "unknown"
+    """
+    # Check for retweet/repost indicator
+    retweet_selectors = [
+        'div[data-testid="socialContext"]',  # Contains "X reposted"
+        'span:contains("Reposted")',
+        'span:contains("Repost")',
+    ]
+    for selector in retweet_selectors:
+        try:
+            if ":contains(" in selector:
+                # XPath fallback
+                elements = post_element.find_elements(
+                    By.XPATH, './/span[contains(text(), "Repost")]'
+                )
+            else:
+                elements = post_element.find_elements(By.CSS_SELECTOR, selector)
+            if elements:
+                return "retweet"
+        except Exception:
+            continue
+
+    # Check for quoted/embedded tweet
+    # Look for nested article[data-testid="tweet"] AND quote labels ("Zitat", "Quote")
+    has_nested_article = False
+    has_quote_label = False
+
+    try:
+        # Check for nested article structure
+        nested_articles = post_element.find_elements(
+            By.CSS_SELECTOR, 'article[data-testid="tweet"] article[data-testid="tweet"]'
+        )
+        if nested_articles:
+            has_nested_article = True
+
+        # Also check for simpler nested structure
+        if not has_nested_article:
+            nested_articles = post_element.find_elements(
+                By.CSS_SELECTOR, 'article[data-testid="tweet"] article'
+            )
+            if nested_articles:
+                has_nested_article = True
+    except Exception:
+        pass
+
+    # Check for quote labels ("Zitat" in German, "Quote" in English)
+    try:
+        # Check for quote label text in the post
+        quote_text_elements = post_element.find_elements(
+            By.XPATH, './/span[contains(text(), "Zitat") or contains(text(), "Quote")]'
+        )
+        if quote_text_elements:
+            has_quote_label = True
+
+        # Also check aria-labelledby for quote indicators
+        if not has_quote_label:
+            aria_labels = post_element.find_elements(By.XPATH, ".//*[@aria-labelledby]")
+            for elem in aria_labels:
+                aria_labelledby = elem.get_attribute("aria-labelledby") or ""
+                if (
+                    "zitat" in aria_labelledby.lower()
+                    or "quote" in aria_labelledby.lower()
+                ):
+                    has_quote_label = True
+                    break
+    except Exception:
+        pass
+
+    # If we have both nested article and quote label, it's a quoted tweet
+    if has_nested_article and has_quote_label:
+        return "quoted"
+
+    # Check for media in the main post (exclude quoted tweet area)
+    # We need to check media that's NOT inside a nested quoted tweet
+    has_media = False
+
+    try:
+        # First, try to find the main post article (not nested)
+        main_article = post_element
+        try:
+            # If post_element is not an article, find the article ancestor
+            if post_element.tag_name != "article":
+                main_article = post_element.find_element(
+                    By.XPATH, "./ancestor::article[@data-testid='tweet']"
+                )
+        except Exception:
+            pass
+
+        # Check for media in main post using primary selectors
+        media_selectors = [
+            'div[data-testid="tweetPhoto"]',
+            'div[data-testid="videoComponent"]',
+        ]
+
+        for selector in media_selectors:
+            try:
+                media_elements = main_article.find_elements(By.CSS_SELECTOR, selector)
+                # Filter out media that's inside a quoted tweet
+                for media_elem in media_elements:
+                    try:
+                        # Check if this media is inside a nested article (quoted tweet)
+                        nested_parent = media_elem.find_element(
+                            By.XPATH, "./ancestor::article[@data-testid='tweet']"
+                        )
+                        # If we find a nested article parent, check if it's different from main article
+                        if nested_parent != main_article:
+                            # This media is in a quoted tweet, skip it
+                            continue
+                    except Exception:
+                        # No nested article found, this is main post media
+                        pass
+
+                    # This is main post media
+                    has_media = True
+                    break
+
+                if has_media:
+                    break
+            except Exception:
+                continue
+
+        # Fallback: check for images/videos if primary selectors didn't find anything
+        if not has_media:
+            try:
+                # Check for images (but exclude profile images)
+                images = main_article.find_elements(
+                    By.CSS_SELECTOR, 'img[src*="pbs.twimg.com"]'
+                )
+                for img in images:
+                    src = img.get_attribute("src") or ""
+                    # Skip profile images (usually contain "profile_images" or "normal.jpg")
+                    if "profile_images" not in src and "normal.jpg" not in src:
+                        # Check if it's not in a quoted tweet
+                        try:
+                            nested_parent = img.find_element(
+                                By.XPATH, "./ancestor::article[@data-testid='tweet']"
+                            )
+                            if nested_parent == main_article:
+                                has_media = True
+                                break
+                        except Exception:
+                            # No nested article, assume main post
+                            has_media = True
+                            break
+            except Exception:
+                pass
+
+            # Check for videos
+            if not has_media:
+                try:
+                    videos = main_article.find_elements(By.CSS_SELECTOR, "video")
+                    for video in videos:
+                        # Check if it's not in a quoted tweet
+                        try:
+                            nested_parent = video.find_element(
+                                By.XPATH, "./ancestor::article[@data-testid='tweet']"
+                            )
+                            if nested_parent == main_article:
+                                has_media = True
+                                break
+                        except Exception:
+                            # No nested article, assume main post
+                            has_media = True
+                            break
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Check if text exists
+    text = _extract_post_text(post_element)
+    has_text = bool(text and len(text.strip()) > 10)
+
+    # Determine type
+    if has_media and has_text:
+        return "text_with_media"
+    elif has_media and not has_text:
+        return "media_only"
+    elif has_text:
+        return "text_only"
+    else:
+        return "unknown"
+
+
 def _extract_post_text(post_element) -> str:
     """Extract post text from a post element.
 
@@ -95,7 +288,7 @@ def _extract_post_text(post_element) -> str:
                         try:
                             # Quoted tweets are typically in a container with specific classes
                             # or have a "Zitat" (Quote) label nearby
-                            quote_container = elem.find_element(
+                            elem.find_element(
                                 By.XPATH,
                                 "./ancestor::div[contains(@class, 'r-9aw3ui')]",
                             )
@@ -354,13 +547,12 @@ def _extract_engagement_metrics(post_element) -> tuple[int, int, int]:
         all_text = post_element.text
         lines = all_text.split("\n")
         for i, line in enumerate(lines):
-            line_lower = line.lower()
             number = _extract_number_from_text(line)
 
             if number > 0:
                 # Check context around the number
                 context = " ".join(lines[max(0, i - 1) : i + 2]).lower()
-                if "reply" in context or "antwort" in context:
+                if "reply" in context or "antwort" in context or "repost" in context:
                     replies = max(replies, number)
                 if "retweet" in context or "repost" in context:
                     retweets = max(retweets, number)
@@ -619,9 +811,29 @@ def read_frontpage_posts(driver, config: BotConfig, count: int = 10) -> list[Pos
                     if post_id:
                         seen_post_ids.add(post_id)
 
+                    # Detect post type and skip non-text posts
+                    post_type = _detect_post_type(post_element)
+                    if post_type in ["media_only", "retweet", "unknown"]:
+                        logger.info(
+                            "skipping_non_text_post",
+                            extra={
+                                "post_id": post_id,
+                                "post_type": post_type,
+                                "reason": "Only text posts are processed",
+                            },
+                        )
+                        continue
+
                     # Extract post data
                     text = _extract_post_text(post_element)
                     if not text or len(text) < 10:  # Skip very short/invalid posts
+                        logger.info(
+                            "skipping_short_post",
+                            extra={
+                                "post_id": post_id,
+                                "text_length": len(text) if text else 0,
+                            },
+                        )
                         continue
 
                     username, display_name = _extract_author_info(post_element)
@@ -640,6 +852,7 @@ def read_frontpage_posts(driver, config: BotConfig, count: int = 10) -> list[Pos
                         username=username,
                         display_name=display_name,
                         post_id=post_id,
+                        post_type=post_type,
                         likes=likes,
                         retweets=retweets,
                         replies=replies,
