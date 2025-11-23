@@ -109,7 +109,7 @@ async def _post_autonomous_tweet_async(
             "tweet_generation_failed_auth",
             extra={
                 "error": str(e),
-                "message": "Authentication failed. Please check your API keys in .env file.",
+                "detail": "Authentication failed. Please check your API keys in .env file.",
             },
         )
         raise
@@ -118,7 +118,7 @@ async def _post_autonomous_tweet_async(
             "tweet_generation_failed_rate_limit",
             extra={
                 "error": str(e),
-                "message": "Rate limit or quota exceeded. Please check your account billing or wait before retrying.",
+                "detail": "Rate limit or quota exceeded. Please check your account billing or wait before retrying.",
             },
         )
         raise
@@ -235,7 +235,7 @@ async def _read_frontpage_posts_async(
     if not openai_api_key and not openrouter_api_key:
         logger.warning(
             "no_llm_provider_configured",
-            extra={"message": "Interest detection will be skipped"},
+            extra={"detail": "Interest detection will be skipped"},
         )
 
     # Initialize LLM client for interest detection

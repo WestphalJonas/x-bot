@@ -162,7 +162,9 @@ class LLMClient:
         Returns:
             Generated tweet text
         """
-        user_prompt = "Generate a single, engaging tweet that follows all the guidelines above. Return only the tweet text, nothing else."
+        from src.core.prompts import TWEET_GENERATION_PROMPT
+
+        user_prompt = TWEET_GENERATION_PROMPT
 
         # For OpenRouter, we might need to adjust the model name
         model = self.model
@@ -256,16 +258,14 @@ class LLMClient:
         style = self.config.personality.style
         topics = ", ".join(self.config.personality.topics)
 
-        prompt = f"""Check if this tweet aligns with the brand personality:
+        from src.core.prompts import BRAND_CHECK_PROMPT
 
-Brand Personality:
-- Tone: {tone}
-- Style: {style}
-- Topics: {topics}
-
-Tweet: "{tweet}"
-
-Respond with only "YES" if the tweet aligns with the brand personality, or "NO" if it doesn't."""
+        prompt = BRAND_CHECK_PROMPT.format(
+            tone=tone,
+            style=style,
+            topics=topics,
+            tweet=tweet,
+        )
 
         # Use the primary provider for brand check
         client = self._get_client(self.config.llm.provider)

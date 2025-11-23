@@ -176,15 +176,12 @@ class BotConfig(BaseModel):
 
     def _generate_basic_prompt(self) -> str:
         """Generate a basic system prompt if template file is missing."""
-        return f"""You are an AI-powered Twitter/X bot.
+        from src.core.prompts import DEFAULT_SYSTEM_PROMPT
 
-Personality:
-- Tone: {self.personality.tone}
-- Style: {self.personality.style}
-- Topics: {", ".join(self.personality.topics)}
-
-Content Guidelines:
-- Tweet length: {self.personality.min_tweet_length}-{self.personality.max_tweet_length} characters
-- Create original, engaging content
-- Stay within Twitter/X terms of service
-- Include AI disclosure in profile bio"""
+        return DEFAULT_SYSTEM_PROMPT.format(
+            tone=self.personality.tone,
+            style=self.personality.style,
+            topics=", ".join(self.personality.topics),
+            min_tweet_length=self.personality.min_tweet_length,
+            max_tweet_length=self.personality.max_tweet_length,
+        )
