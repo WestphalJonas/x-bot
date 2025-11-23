@@ -6,6 +6,7 @@ from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from src.core.config import BotConfig
+from src.state.models import Post
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,73 @@ class LLMClient:
         raise RuntimeError(
             "No LLM providers available. Please configure at least one provider API key."
         )
+
+    async def generate_inspiration_tweet(self, posts: list[Post]) -> str:
+        """Generate a tweet inspired by a list of posts.
+
+        Args:
+            posts: List of Post objects to use as inspiration
+
+        Returns:
+            Generated tweet text
+        """
+        from src.core.prompts import INSPIRATION_TWEET_PROMPT
+
+        # Format posts context
+        posts_context = "\n\n".join(
+            [f"Post {i+1}:\n{post.text}" for i, post in enumerate(posts)]
+        )
+
+        tone = self.config.personality.tone
+        style = self.config.personality.style
+        topics = ", ".join(self.config.personality.topics)
+
+        user_prompt = INSPIRATION_TWEET_PROMPT.format(
+            posts_context=posts_context,
+            tone=tone,
+            style=style,
+            topics=topics,
+        )
+
+        # For OpenRouter, we might need to adjust the model name
+        model = self.model
+        if self.config.llm.provider == "openrouter":
+            model = self.config.llm.model
+
+        try:
+            tweet = await self._generate_with_provider(
+                self._get_client(self.config.llm.provider),
+                self.config.llm.provider,
+                user_prompt,
+            )
+        except Exception as e:
+            logger.error(
+                "inspiration_generation_failed",
+                extra={"error": str(e), "provider": self.config.llm.provider},
+            )
+            # Try fallback if available
+            if self.config.llm.fallback_provider:
+                logger.info(
+                    "trying_fallback_provider",
+                    extra={"provider": self.config.llm.fallback_provider},
+                )
+                try:
+                    tweet = await self._generate_with_provider(
+                        self._get_client(self.config.llm.fallback_provider),
+                        self.config.llm.fallback_provider,
+                        user_prompt,
+                    )
+                except Exception as fallback_error:
+                    logger.error(
+                        "fallback_inspiration_generation_failed",
+                        extra={"error": str(fallback_error)},
+                    )
+                    raise
+            else:
+                raise
+
+        # Validate the generated tweet
+        return self._validate_tweet(tweet)
 
     @retry(
         stop=stop_after_attempt(3),

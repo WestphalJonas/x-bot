@@ -103,6 +103,14 @@ class SchedulerConfig(BaseModel):
     event_check_minutes: int = Field(
         default=15, ge=1, description="Minutes between event checks"
     )
+    inspiration_check_minutes: int = Field(
+        default=60, ge=1, description="Minutes between inspiration queue checks"
+    )
+    inspiration_batch_size: int = Field(
+        default=10,
+        ge=1,
+        description="Number of posts to collect before generating inspiration tweet",
+    )
 
 
 class PersonalityConfig(BaseModel):

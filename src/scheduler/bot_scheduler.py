@@ -104,6 +104,19 @@ class BotScheduler:
         trigger = IntervalTrigger(minutes=interval_minutes)
         self.add_job(func=func, job_id="check_notifications", trigger=trigger, **kwargs)
 
+    def setup_inspiration_job(self, func: Callable, **kwargs) -> None:
+        """Setup inspiration queue processing job.
+
+        Args:
+            func: Function to execute
+            **kwargs: Additional arguments to pass to add_job
+        """
+        interval_minutes = self.config.scheduler.inspiration_check_minutes
+        trigger = IntervalTrigger(minutes=interval_minutes)
+        self.add_job(
+            func=func, job_id="process_inspiration_queue", trigger=trigger, **kwargs
+        )
+
     def start(self) -> None:
         """Start the scheduler."""
         if self._is_running:

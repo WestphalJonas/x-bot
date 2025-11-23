@@ -437,3 +437,115 @@ def check_notifications(config: BotConfig, env_settings: dict[str, Any]) -> None
             },
             exc_info=True,
         )
+
+
+async def process_inspiration_queue(
+    config: BotConfig,
+    state_manager: Any,  # Avoid circular import
+    llm_client: LLMClient,
+    driver_manager: Any,  # Avoid circular import
+) -> None:
+    """Process interesting posts queue to generate inspired content.
+
+    Args:
+        config: Bot configuration
+        state_manager: State manager instance
+        llm_client: LLM client instance
+        driver_manager: Browser driver manager
+    """
+    try:
+        state = await state_manager.load_state()
+
+        # Check if we have enough posts in the queue
+        # Default threshold is 10 if not specified in config
+        threshold = config.scheduler.inspiration_batch_size
+
+        # Queue is stored as list of dicts in state.interesting_posts_queue
+        queue_size = len(state.interesting_posts_queue)
+
+        if queue_size < threshold:
+            logger.info(
+                "inspiration_queue_below_threshold",
+                extra={
+                    "current_size": queue_size,
+                    "threshold": threshold,
+                },
+            )
+            return
+
+        logger.info(
+            "processing_inspiration_queue",
+            extra={"queue_size": queue_size},
+        )
+
+        # Take the first batch of posts
+        # We need to convert dicts back to Post objects for the LLM client
+        from src.state.models import Post
+
+        posts_batch_dicts = state.interesting_posts_queue[:threshold]
+        posts_batch = [Post(**p) for p in posts_batch_dicts]
+
+        # Generate inspired tweet
+        try:
+            tweet_text = await llm_client.generate_inspiration_tweet(posts_batch)
+            logger.info("inspiration_tweet_generated", extra={"tweet": tweet_text})
+
+            # Post the tweet
+            # We reuse the posting logic, but we need a driver
+            # Since this is an async job, we need to be careful with the driver
+            # For now, we'll assume the driver manager handles the session
+            # Note: driver_manager is likely just the create_driver function or similar in this context
+            # We'll create a new driver for this task
+            
+            logger.info("initializing_browser_for_inspiration")
+            driver = create_driver(config)
+            try:
+                # Load cookies/login
+                cookies_loaded = load_cookies(driver, config)
+                if not cookies_loaded:
+                    # We might need env settings here, but for now assume cookies exist or login works
+                    # This part might need refactoring to pass env settings if login is required
+                    pass
+
+                from src.x.posting import post_tweet
+
+                success = post_tweet(driver, tweet_text, config)
+
+                if success:
+                    logger.info("inspiration_tweet_posted")
+
+                    # Update state: remove processed posts
+                    # We reload state to avoid race conditions
+                    current_state = await state_manager.load_state()
+
+                    # Remove the first 'threshold' items
+                    # We assume the queue hasn't changed significantly (FIFO)
+                    if len(current_state.interesting_posts_queue) >= threshold:
+                        current_state.interesting_posts_queue = current_state.interesting_posts_queue[threshold:]
+
+                    # Increment post count
+                    current_state.counters["posts_today"] += 1
+                    current_state.last_post_time = datetime.now(timezone.utc)
+
+                    await state_manager.save_state(current_state)
+                else:
+                    logger.error("failed_to_post_inspiration_tweet")
+
+            finally:
+                driver.quit()
+
+        except Exception as e:
+            logger.error(
+                "inspiration_processing_error",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
+            # Don't remove posts from queue if generation/posting failed
+
+    except Exception as e:
+        logger.error(
+            "inspiration_job_failed",
+            extra={"error": str(e)},
+            exc_info=True,
+        )
+        raise

@@ -13,6 +13,8 @@ from src.scheduler import BotScheduler
 from src.scheduler.jobs import (
     check_notifications,
     post_autonomous_tweet,
+    post_autonomous_tweet,
+    process_inspiration_queue,
     read_frontpage_posts,
 )
 
@@ -108,6 +110,9 @@ def main():
     )
     scheduler.setup_notifications_job(
         create_job_wrapper(check_notifications, config, env_settings)
+    )
+    scheduler.setup_inspiration_job(
+        create_job_wrapper(process_inspiration_queue, config, env_settings)
     )
 
     # Setup signal handlers for graceful shutdown
