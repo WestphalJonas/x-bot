@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}X Bot Dashboard{% endblock %}</title>
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/styles.css">
+    
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Navigation -->
+        <nav class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">𝕏</span>
+                <span class="logo-text">Bot Dashboard</span>
+            </div>
+            
+            <ul class="nav-links">
+                <li>
+                    <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+                        <span class="nav-icon">◉</span>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/posts" class="nav-link {% if request.url.path == '/posts' %}active{% endif %}">
+                        <span class="nav-icon">✎</span>
+                        <span>Posts</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/analytics" class="nav-link {% if request.url.path == '/analytics' %}active{% endif %}">
+                        <span class="nav-icon">◧</span>
+                        <span>Analytics</span>
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="nav-footer">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">System Active</span>
+                </div>
+            </div>
+        </nav>
+        
+        <!-- Main content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+                <div class="header-actions">
+                    {% block header_actions %}{% endblock %}
+                </div>
+            </header>
+            
+            <div class="content">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+

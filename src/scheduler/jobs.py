@@ -15,6 +15,7 @@ from src.x.auth import load_cookies, login, save_cookies
 from src.x.driver import create_driver
 from src.x.posting import post_tweet
 from src.x.reading import read_frontpage_posts as read_posts_from_frontpage
+from src.web.data_tracker import log_rejected_tweet, log_written_tweet
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,12 @@ async def _post_autonomous_tweet_async(
     is_valid, error_message = await llm_client.validate_tweet(tweet_text)
     if not is_valid:
         logger.error("tweet_validation_failed", extra={"error": error_message})
+        # Log rejected tweet for dashboard
+        await log_rejected_tweet(
+            text=tweet_text,
+            reason=error_message,
+            operation="autonomous",
+        )
         raise ValueError(f"Tweet validation failed: {error_message}")
 
     logger.info("tweet_validated", extra={"length": len(tweet_text)})
@@ -159,6 +166,12 @@ async def _post_autonomous_tweet_async(
         if not post_success:
             logger.error("tweet_post_failed")
             raise RuntimeError("Tweet posting failed")
+
+        # Log written tweet for dashboard
+        await log_written_tweet(
+            text=tweet_text,
+            tweet_type="autonomous",
+        )
 
         # Update state
         state.counters["posts_today"] += 1
@@ -752,6 +765,12 @@ async def _process_inspiration_queue_async(
                     "inspiration_tweet_validation_failed",
                     extra={"error": error_message, "attempts": max_attempts},
                 )
+                # Log rejected tweet for dashboard
+                await log_rejected_tweet(
+                    text=tweet_text,
+                    reason=error_message,
+                    operation="inspiration",
+                )
                 raise ValueError(
                     f"Inspiration tweet validation failed after {max_attempts} attempts: {error_message}"
                 )
@@ -783,6 +802,12 @@ async def _process_inspiration_queue_async(
 
             if success:
                 logger.info("inspiration_tweet_posted")
+
+                # Log written tweet for dashboard
+                await log_written_tweet(
+                    text=tweet_text,
+                    tweet_type="inspiration",
+                )
 
                 # Update state: remove processed posts
                 # We reload state to avoid race conditions

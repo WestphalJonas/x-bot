@@ -1,0 +1,28 @@
+<div class="posts-list-header">
+    <h3>Read Posts</h3>
+    <span class="posts-count">{{ total }} total</span>
+</div>
+
+{% if posts %}
+<div class="posts-list">
+    {% for post in posts %}
+    <div class="post-card">
+        <div class="post-header">
+            <span class="post-author">{{ post.metadata.get('author', 'Unknown') }}</span>
+            <span class="post-time">{{ post.metadata.get('timestamp', '')[:19] if post.metadata.get('timestamp') else 'Unknown time' }}</span>
+        </div>
+        <div class="post-text">{{ post.text }}</div>
+        <div class="post-footer">
+            <span class="post-id">ID: {{ post.id[:12] }}...</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">📭</div>
+    <p>No read posts found</p>
+    <p class="empty-hint">Posts will appear here once the bot reads from the frontpage.</p>
+</div>
+{% endif %}
+

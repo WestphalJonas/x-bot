@@ -1,0 +1,25 @@
+<div class="posts-list-header">
+    <h3>Written Tweets</h3>
+    <span class="posts-count">{{ total }} total</span>
+</div>
+
+{% if tweets %}
+<div class="posts-list">
+    {% for tweet in tweets %}
+    <div class="post-card tweet-card">
+        <div class="post-header">
+            <span class="tweet-type badge-{{ tweet.tweet_type }}">{{ tweet.tweet_type | capitalize }}</span>
+            <span class="post-time">{{ tweet.timestamp[:19] if tweet.timestamp else 'Unknown time' }}</span>
+        </div>
+        <div class="post-text">{{ tweet.text }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">✍️</div>
+    <p>No written tweets yet</p>
+    <p class="empty-hint">Tweets will appear here once the bot starts posting.</p>
+</div>
+{% endif %}
+

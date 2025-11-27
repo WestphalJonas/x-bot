@@ -3,7 +3,7 @@ name = "x-bot"
 version = "0.0.1"
 description = "Small 𝕏 bot"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
     "aiofiles>=24.1.0",
     "apscheduler>=3.11.1",
@@ -19,6 +19,10 @@ dependencies = [
     "twscrape>=0.17.0",
     "undetected-chromedriver>=3.5.5",
     "webdriver-manager>=4.0.2",
+    "fastapi>=0.122.0",
+    "uvicorn>=0.38.0",
+    "jinja2>=3.1.6",
+    "chromadb>=1.3.5",
 ]
 
 [dependency-groups]

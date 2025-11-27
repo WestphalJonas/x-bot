@@ -104,6 +104,21 @@ Respond with only "YES" if it matches, or "NO" if it doesn't."""
                 },
             )
 
+            # Log to dashboard tracker
+            try:
+                from src.web.data_tracker import log_token_usage
+
+                await log_token_usage(
+                    provider=llm_client.config.llm.provider,
+                    model=llm_client.model,
+                    prompt_tokens=response.usage.prompt_tokens,
+                    completion_tokens=response.usage.completion_tokens,
+                    total_tokens=response.usage.total_tokens,
+                    operation="interest_check",
+                )
+            except Exception:
+                pass  # Don't fail interest check if tracking fails
+
         return matches
 
     except Exception as e:

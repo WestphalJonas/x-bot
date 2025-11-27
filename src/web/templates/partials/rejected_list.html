@@ -1,0 +1,29 @@
+<div class="posts-list-header">
+    <h3>Rejected Tweets</h3>
+    <span class="posts-count">{{ total }} total</span>
+</div>
+
+{% if tweets %}
+<div class="posts-list">
+    {% for tweet in tweets %}
+    <div class="post-card rejected-card">
+        <div class="post-header">
+            <span class="tweet-type badge-rejected">{{ tweet.operation | capitalize }}</span>
+            <span class="post-time">{{ tweet.timestamp[:19] if tweet.timestamp else 'Unknown time' }}</span>
+        </div>
+        <div class="post-text">{{ tweet.text }}</div>
+        <div class="rejection-reason">
+            <span class="reason-label">Reason:</span>
+            <span class="reason-text">{{ tweet.reason }}</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">✅</div>
+    <p>No rejected tweets</p>
+    <p class="empty-hint">All tweets have passed validation. Nice!</p>
+</div>
+{% endif %}
+

@@ -41,6 +41,49 @@ class AgentState(BaseModel):
         default_factory=list,
         description="List of processed notification IDs to avoid duplicates (max 100 IDs)",
     )
+    rejected_tweets: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of rejected tweets that didn't pass validation (max 50)",
+    )
+    token_usage_log: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Log of token usage per LLM call (max 100 entries)",
+    )
+    written_tweets: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of successfully posted tweets (max 50)",
+    )
+
+
+class TokenUsageEntry(BaseModel):
+    """Token usage entry for analytics."""
+
+    timestamp: datetime = Field(..., description="Timestamp of the LLM call")
+    provider: str = Field(
+        ..., description="LLM provider used (openai, openrouter, etc.)"
+    )
+    model: str = Field(..., description="Model name used")
+    prompt_tokens: int = Field(default=0, ge=0, description="Number of prompt tokens")
+    completion_tokens: int = Field(
+        default=0, ge=0, description="Number of completion tokens"
+    )
+    total_tokens: int = Field(default=0, ge=0, description="Total tokens used")
+    operation: str = Field(
+        default="generate",
+        description="Operation type: generate, validate, interest_check, etc.",
+    )
+
+
+class RejectedTweet(BaseModel):
+    """Rejected tweet model for tracking failed posts."""
+
+    text: str = Field(..., description="The rejected tweet text")
+    reason: str = Field(..., description="Reason for rejection")
+    timestamp: datetime = Field(..., description="When it was rejected")
+    operation: str = Field(
+        default="autonomous",
+        description="Operation type: autonomous, inspiration, reply",
+    )
 
 
 class Post(BaseModel):
@@ -88,10 +131,12 @@ class Notification(BaseModel):
         default=None, description="Display name of the user who sent the notification"
     )
     original_post_id: str | None = Field(
-        default=None, description="ID of the original post being replied to (if applicable)"
+        default=None,
+        description="ID of the original post being replied to (if applicable)",
     )
     original_post_text: str | None = Field(
-        default=None, description="Text of the original post being replied to (if applicable)"
+        default=None,
+        description="Text of the original post being replied to (if applicable)",
     )
     timestamp: datetime | None = Field(
         default=None, description="Notification timestamp"

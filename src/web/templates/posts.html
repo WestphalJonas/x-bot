@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Posts - X Bot{% endblock %}
+{% block page_title %}Posts{% endblock %}
+
+{% block content %}
+<div class="posts-container">
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab {% if active_tab == 'read' %}active{% endif %}" 
+                hx-get="/partials/posts/read" 
+                hx-target="#posts-content"
+                hx-swap="innerHTML"
+                onclick="setActiveTab(this)">
+            📖 Read Posts
+        </button>
+        <button class="tab {% if active_tab == 'written' %}active{% endif %}"
+                hx-get="/partials/posts/written" 
+                hx-target="#posts-content"
+                hx-swap="innerHTML"
+                onclick="setActiveTab(this)">
+            ✍️ Written Tweets
+        </button>
+        <button class="tab {% if active_tab == 'rejected' %}active{% endif %}"
+                hx-get="/partials/posts/rejected" 
+                hx-target="#posts-content"
+                hx-swap="innerHTML"
+                onclick="setActiveTab(this)">
+            ❌ Rejected
+        </button>
+    </div>
+    
+    <!-- Content area -->
+    <div id="posts-content" class="posts-content"
+         hx-get="/partials/posts/{{ active_tab }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <span>Loading posts...</span>
+        </div>
+    </div>
+</div>
+
+<script>
+function setActiveTab(button) {
+    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+    button.classList.add('active');
+}
+</script>
+{% endblock %}
+

@@ -1,12 +1,16 @@
 """LLM integration for tweet generation with multi-provider support."""
 
 import logging
+from typing import TYPE_CHECKING
 
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from src.core.config import BotConfig
 from src.state.models import Post
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +117,7 @@ class LLMClient:
 
             try:
                 tweet = await self._generate_with_provider(
-                    client, provider, system_prompt
+                    client, provider, system_prompt, operation="generate"
                 )
                 logger.info("llm_success", extra={"provider": provider})
                 return tweet
@@ -207,6 +211,7 @@ class LLMClient:
                     provider,
                     system_prompt,
                     user_prompt=user_prompt,
+                    operation="inspiration",
                 )
                 logger.info("inspiration_llm_success", extra={"provider": provider})
                 # Validate the generated tweet (basic validation, not full async validate_tweet)
@@ -244,6 +249,7 @@ class LLMClient:
         provider: str,
         system_prompt: str,
         user_prompt: str | None = None,
+        operation: str = "generate",
     ) -> str:
         """Generate tweet using specific provider.
 
@@ -252,6 +258,7 @@ class LLMClient:
             provider: Provider name for logging
             system_prompt: System prompt with personality and guidelines
             user_prompt: Optional user prompt (defaults to TWEET_GENERATION_PROMPT)
+            operation: Operation type for tracking (generate, inspiration, etc.)
 
         Returns:
             Generated tweet text
@@ -290,8 +297,25 @@ class LLMClient:
                     "tokens": response.usage.total_tokens,
                     "prompt_tokens": response.usage.prompt_tokens,
                     "completion_tokens": response.usage.completion_tokens,
+                    "operation": operation,
                 },
             )
+
+            # Log to dashboard tracker
+            try:
+                from src.web.data_tracker import log_token_usage
+
+                await log_token_usage(
+                    provider=provider,
+                    model=model,
+                    prompt_tokens=response.usage.prompt_tokens,
+                    completion_tokens=response.usage.completion_tokens,
+                    total_tokens=response.usage.total_tokens,
+                    operation=operation,
+                )
+            except Exception as e:
+                # Don't fail the generation if tracking fails
+                logger.debug("token_tracking_failed", extra={"error": str(e)})
 
         return tweet
 
@@ -381,6 +405,23 @@ class LLMClient:
             )
 
             result = response.choices[0].message.content.strip().upper()
+
+            # Log token usage for validation
+            if response.usage:
+                try:
+                    from src.web.data_tracker import log_token_usage
+
+                    await log_token_usage(
+                        provider=self.config.llm.provider,
+                        model=self.model,
+                        prompt_tokens=response.usage.prompt_tokens,
+                        completion_tokens=response.usage.completion_tokens,
+                        total_tokens=response.usage.total_tokens,
+                        operation="validate",
+                    )
+                except Exception:
+                    pass  # Don't fail validation if tracking fails
+
             return result.startswith("YES")
 
         except Exception as e:

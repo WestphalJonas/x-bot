@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - X Bot{% endblock %}
+{% block page_title %}Token Analytics{% endblock %}
+
+{% block header_actions %}
+<button class="btn btn-secondary" hx-get="/partials/analytics/tokens" hx-target="#analytics-content" hx-swap="innerHTML">
+    ↻ Refresh
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="analytics-container">
+    <div id="analytics-content"
+         hx-get="/partials/analytics/tokens"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <span>Loading analytics...</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
