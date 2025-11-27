@@ -30,6 +30,17 @@ class AgentState(BaseModel):
         default_factory=list,
         description="Queue of interesting posts for later reaction processing (max 50 posts)",
     )
+    notifications_queue: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Queue of notifications (replies and mentions) for later processing (max 50 notifications)",
+    )
+    last_notification_check_time: datetime | None = Field(
+        default=None, description="Timestamp of last notification check"
+    )
+    processed_notification_ids: list[str] = Field(
+        default_factory=list,
+        description="List of processed notification IDs to avoid duplicates (max 100 IDs)",
+    )
 
 
 class Post(BaseModel):
@@ -55,4 +66,40 @@ class Post(BaseModel):
     is_interesting: bool | None = Field(
         default=None,
         description="Whether post matches bot's interests (None = not evaluated yet)",
+    )
+
+
+class Notification(BaseModel):
+    """Notification model for Twitter/X notifications."""
+
+    notification_id: str | None = Field(
+        default=None, description="Unique notification identifier"
+    )
+    type: str = Field(
+        ...,
+        description="Notification type: reply, mention, like, retweet, follow, etc.",
+    )
+    text: str = Field(..., description="Notification/reply content/text")
+    from_username: str = Field(
+        ...,
+        description="Username of the user who sent the notification (e.g., '@testuser' or 'testuser')",
+    )
+    from_display_name: str | None = Field(
+        default=None, description="Display name of the user who sent the notification"
+    )
+    original_post_id: str | None = Field(
+        default=None, description="ID of the original post being replied to (if applicable)"
+    )
+    original_post_text: str | None = Field(
+        default=None, description="Text of the original post being replied to (if applicable)"
+    )
+    timestamp: datetime | None = Field(
+        default=None, description="Notification timestamp"
+    )
+    url: str | None = Field(default=None, description="Notification URL")
+    is_reply: bool = Field(
+        default=False, description="True if this is a reply notification"
+    )
+    is_mention: bool = Field(
+        default=False, description="True if this is a mention notification"
     )

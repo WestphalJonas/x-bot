@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 
 from src.core.config import BotConfig
 from src.scheduler import BotScheduler
+from src.scheduler.bot_scheduler import get_job_lock
 from src.scheduler.jobs import (
     check_notifications,
-    post_autonomous_tweet,
     post_autonomous_tweet,
     process_inspiration_queue,
     read_frontpage_posts,
@@ -68,6 +68,8 @@ def validate_env_settings(env_settings: dict[str, str | None]) -> None:
 def create_job_wrapper(job_func, config: BotConfig, env_settings: dict):
     """Create a wrapper function for a job that passes config and env_settings.
 
+    Uses a global lock to prevent parallel job execution.
+
     Args:
         job_func: Job function to wrap
         config: Bot configuration
@@ -76,7 +78,18 @@ def create_job_wrapper(job_func, config: BotConfig, env_settings: dict):
     Returns:
         Wrapped function that can be called without arguments
     """
-    return lambda: job_func(config, env_settings)
+
+    def wrapper():
+        lock = get_job_lock()
+        if not lock.acquire(blocking=False):
+            logger.info("job_skipped_lock_held", extra={"job": job_func.__name__})
+            return
+        try:
+            job_func(config, env_settings)
+        finally:
+            lock.release()
+
+    return wrapper
 
 
 def main():
@@ -108,9 +121,9 @@ def main():
     scheduler.setup_reading_job(
         create_job_wrapper(read_frontpage_posts, config, env_settings)
     )
-    scheduler.setup_notifications_job(
-        create_job_wrapper(check_notifications, config, env_settings)
-    )
+    # scheduler.setup_notifications_job(
+    #     create_job_wrapper(check_notifications, config, env_settings)
+    # )
     scheduler.setup_inspiration_job(
         create_job_wrapper(process_inspiration_queue, config, env_settings)
     )

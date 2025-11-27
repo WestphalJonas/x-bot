@@ -1,6 +1,7 @@
 """Bot scheduler using APScheduler BackgroundScheduler."""
 
 import logging
+import threading
 from typing import Callable
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -9,6 +10,14 @@ from apscheduler.triggers.interval import IntervalTrigger
 from src.core.config import BotConfig
 
 logger = logging.getLogger(__name__)
+
+# Global lock to prevent parallel job execution
+_job_lock = threading.Lock()
+
+
+def get_job_lock() -> threading.Lock:
+    """Get the global job lock."""
+    return _job_lock
 
 
 class BotScheduler:

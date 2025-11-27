@@ -718,3 +718,292 @@ class PostParser:
             logger.warning("timestamp_extraction_failed", extra={"error": str(e)})
 
         return None
+
+
+class NotificationParser:
+    """Parser for extracting data from Twitter/X notification elements."""
+
+    @staticmethod
+    def extract_notification_type(notification_element) -> str:
+        """Extract notification type from notification element.
+
+        Based on Twitter/X HTML structure:
+        - Reply: Contains "replied" text or reply icon
+        - Mention: Contains "@username" mention
+        - Like: Contains "liked" text or like icon
+        - Retweet: Contains "reposted" or "retweeted" text
+        - Follow: Contains "followed you" text
+
+        Args:
+            notification_element: Selenium WebElement representing a notification
+
+        Returns:
+            String indicating notification type: "reply", "mention", "like", "retweet", "follow", "unknown"
+        """
+        try:
+            # Get all text from notification element
+            notification_text = notification_element.text.lower()
+
+            # Check for reply indicators
+            if "replied" in notification_text or "antwort" in notification_text:
+                return "reply"
+
+            # Check for mention indicators (mentions usually have @username in text)
+            if "@" in notification_text and "mentioned" in notification_text:
+                return "mention"
+
+            # Check for like indicators
+            if "liked" in notification_text or "gefällt" in notification_text:
+                return "like"
+
+            # Check for retweet indicators
+            if (
+                "reposted" in notification_text
+                or "retweeted" in notification_text
+                or "repost" in notification_text
+            ):
+                return "retweet"
+
+            # Check for follow indicators
+            if "followed you" in notification_text or "folgt dir" in notification_text:
+                return "follow"
+
+            # Check for reply by looking for reply button or icon
+            try:
+                reply_buttons = notification_element.find_elements(
+                    By.CSS_SELECTOR, 'button[data-testid="reply"]'
+                )
+                if reply_buttons:
+                    return "reply"
+            except Exception:
+                pass
+
+            # Default to unknown if we can't determine type
+            return "unknown"
+
+        except Exception as e:
+            logger.warning(
+                "notification_type_extraction_failed", extra={"error": str(e)}
+            )
+            return "unknown"
+
+    @staticmethod
+    def extract_notification_text(notification_element) -> str:
+        """Extract notification/reply text content.
+
+        Args:
+            notification_element: Selenium WebElement representing a notification
+
+        Returns:
+            Notification text content
+        """
+        # Try to find the notification text element
+        text_selectors = [
+            'div[data-testid="tweetText"]',
+            'div[lang]',
+            'span[lang]',
+        ]
+
+        for selector in text_selectors:
+            try:
+                text_elements = notification_element.find_elements(
+                    By.CSS_SELECTOR, selector
+                )
+                if text_elements:
+                    text = text_elements[0].text.strip()
+                    if text:
+                        return text
+            except Exception:
+                continue
+
+        # Fallback: get all text and filter out metadata
+        try:
+            all_text = notification_element.text.strip()
+            # Remove lines that look like engagement metrics or metadata
+            lines = all_text.split("\n")
+            filtered_lines = [
+                line
+                for line in lines
+                if not re.match(r"^[\d.]+[KMkm]?$", line.strip())
+                and not line.strip().startswith("@")
+                and "·" not in line
+                and "replied" not in line.lower()
+                and "liked" not in line.lower()
+                and "reposted" not in line.lower()
+            ]
+            return " ".join(filtered_lines).strip()
+        except Exception:
+            return ""
+
+    @staticmethod
+    def extract_notification_id(notification_element) -> str | None:
+        """Extract notification ID from notification element.
+
+        Args:
+            notification_element: Selenium WebElement representing a notification
+
+        Returns:
+            Notification ID if found, None otherwise
+        """
+        # Try to find link to the notification/post
+        link_selectors = [
+            'a[href*="/status/"]',
+            'a[href*="/i/web/status/"]',
+            'time[datetime]',
+        ]
+
+        for selector in link_selectors:
+            try:
+                elements = notification_element.find_elements(By.CSS_SELECTOR, selector)
+                for elem in elements:
+                    href = elem.get_attribute("href")
+                    if not href:
+                        try:
+                            parent_link = elem.find_element(
+                                By.XPATH, "./ancestor::a[@href]"
+                            )
+                            href = parent_link.get_attribute("href")
+                        except Exception:
+                            continue
+
+                    if href and "/status/" in href:
+                        # Extract status ID from URL
+                        match = re.search(r"/status/(\d+)", href)
+                        if match:
+                            return match.group(1)
+            except Exception:
+                continue
+
+        return None
+
+    @staticmethod
+    def extract_notification_url(notification_element) -> str | None:
+        """Extract notification URL from notification element.
+
+        Args:
+            notification_element: Selenium WebElement representing a notification
+
+        Returns:
+            Notification URL if found, None otherwise
+        """
+        # Try to find timestamp link first
+        try:
+            time_elements = notification_element.find_elements(
+                By.CSS_SELECTOR, "time[datetime]"
+            )
+            for time_elem in time_elements:
+                try:
+                    parent_link = time_elem.find_element(
+                        By.XPATH, "./ancestor::a[@href]"
+                    )
+                    href = parent_link.get_attribute("href")
+                    if href and "/status/" in href:
+                        return href
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Try to find status links
+        link_selectors = [
+            'a[href*="/status/"]',
+            'a[href*="/i/web/status/"]',
+        ]
+
+        for selector in link_selectors:
+            try:
+                links = notification_element.find_elements(By.CSS_SELECTOR, selector)
+                for link in links:
+                    href = link.get_attribute("href")
+                    if href and "/status/" in href:
+                        return href
+            except Exception:
+                continue
+
+        return None
+
+    @staticmethod
+    def extract_notification_timestamp(notification_element) -> datetime | None:
+        """Extract notification timestamp from notification element.
+
+        Args:
+            notification_element: Selenium WebElement representing a notification
+
+        Returns:
+            Notification timestamp if found, None otherwise
+        """
+        try:
+            time_elements = notification_element.find_elements(
+                By.CSS_SELECTOR, "time[datetime]"
+            )
+            for time_elem in time_elements:
+                datetime_str = time_elem.get_attribute("datetime")
+                if datetime_str:
+                    try:
+                        # Parse ISO format datetime: "2025-11-18T17:18:33.000Z"
+                        if datetime_str.endswith("Z"):
+                            datetime_str = datetime_str[:-1] + "+00:00"
+                        elif "+" not in datetime_str and "-" not in datetime_str[-6:]:
+                            datetime_str = datetime_str + "+00:00"
+
+                        return datetime.fromisoformat(datetime_str)
+                    except (ValueError, AttributeError) as e:
+                        logger.warning(
+                            "notification_timestamp_parse_failed",
+                            extra={"datetime_str": datetime_str, "error": str(e)},
+                        )
+                        continue
+        except Exception as e:
+            logger.warning(
+                "notification_timestamp_extraction_failed", extra={"error": str(e)}
+            )
+
+        return None
+
+    @staticmethod
+    def extract_original_post_context(notification_element) -> tuple[str | None, str | None]:
+        """Extract original post ID and text for reply notifications.
+
+        Args:
+            notification_element: Selenium WebElement representing a notification
+
+        Returns:
+            Tuple of (original_post_id, original_post_text)
+        """
+        original_post_id = None
+        original_post_text = None
+
+        # Try to find the original post in the notification
+        # Replies often show the original post above or below the reply
+        try:
+            # Look for nested article elements (original post might be nested)
+            nested_articles = notification_element.find_elements(
+                By.CSS_SELECTOR, 'article[data-testid="tweet"] article[data-testid="tweet"]'
+            )
+            if nested_articles:
+                # The nested article is likely the original post
+                original_post = nested_articles[0]
+                original_post_id = PostParser.extract_post_id(original_post)
+                original_post_text = PostParser.extract_post_text(original_post)
+        except Exception:
+            pass
+
+        # Also try to find original post link in the notification text
+        if not original_post_id:
+            try:
+                links = notification_element.find_elements(
+                    By.CSS_SELECTOR, 'a[href*="/status/"]'
+                )
+                for link in links:
+                    href = link.get_attribute("href")
+                    if href and "/status/" in href:
+                        match = re.search(r"/status/(\d+)", href)
+                        if match:
+                            # This might be the reply, check if there's another status link
+                            # For now, use the first one found
+                            if not original_post_id:
+                                original_post_id = match.group(1)
+            except Exception:
+                pass
+
+        return (original_post_id, original_post_text)

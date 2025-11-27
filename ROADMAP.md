@@ -1,7 +1,6 @@
 # X Bot - Development Roadmap
 
-**Last Updated:** 2025-01-27  
-**Current Phase:** MVP Development - Phase 2 (Interest Detection Integrated, Queue Ready for Reactions)
+**Current Phase:** MVP Development - Phase 3 (Notification Checking Implemented)
 
 ## 📊 Current Status Overview
 
@@ -9,7 +8,7 @@
 
 #### Core Infrastructure
 - ✅ **Configuration System** (`src/core/config.py`)
-  - YAML-based configuration with Pydantic validation
+  - YAML-based configuration (`config/config.yaml`) with Pydantic validation
   - Rate limits, LLM, Scheduler, Personality configs
   - Environment variable support
 
@@ -18,12 +17,16 @@
   - Automatic fallback mechanism
   - Tweet generation and validation
   - Brand alignment checking
+  - Note: Google and Anthropic providers not yet implemented (only OpenAI and OpenRouter)
 
 - ✅ **State Management** (`src/state/`)
-  - JSON-based state persistence
-  - Pydantic models for validation
+  - JSON-based state persistence (`data/state.json`)
+  - Pydantic models for validation (Post, Notification)
   - Atomic writes (temp file → rename)
   - Counters for rate limiting
+  - Interesting posts queue (max 50 posts)
+  - Notifications queue (max 50 notifications)
+  - Processed notification IDs tracking (max 100 IDs)
 
 #### Twitter/X Automation
 - ✅ **Browser Driver** (`src/x/driver.py`)
@@ -49,6 +52,14 @@
   - Duplicate post filtering
   - Post type detection (text-only, media-only, retweets, quoted tweets)
   - Skip non-text posts (media-only, retweets without text)
+
+- ✅ **Notification Checking** (`src/x/notifications.py`)
+  - Notification page navigation and extraction
+  - Reply and mention detection
+  - Notification content and metadata extraction
+  - Duplicate filtering by notification ID
+  - Notification queue management (max 50 notifications)
+  - Processed notification IDs tracking
 
 - ✅ **Interest Detection** (`src/core/interest.py`)
   - LLM-based post evaluation against bot personality
@@ -115,8 +126,8 @@
 - [x] Extract post URLs (filtering out analytics links)
 - [x] Implement duplicate post filtering by post ID
 - [x] Add comprehensive test coverage
-- [X] Detect different post types (text-only, media-only, retweets, quoted tweets)
-- [ ] Skip non-text posts (media-only, retweets without text) during reading
+- [x] Detect different post types (text-only, media-only, retweets, quoted tweets)
+- [x] Skip non-text posts (media-only, retweets without text) during reading
 - [ ] Extract media information (images, videos) for future use
 - [ ] Handle quoted tweets and retweets properly
 
@@ -152,42 +163,53 @@
 
 ---
 
-#### 4. Reaction Writing (`src/x/reactions.py`) 🔴 **HIGH**
-**Status:** ❌ Not Started  
-**Priority:** Critical  
-**Estimated Effort:** 2-3 days
+#### 4. Inspiration-based Posting (`src/scheduler/jobs.py`) ✅ **COMPLETED**
+**Status:** ✅ Completed  
+**Priority:** Critical
+**Estimated Effort:** 2-3 days (Completed)
 
 **Tasks:**
-- [ ] Create `src/x/reactions.py`
-- [ ] Implement `write_reaction(post: Post, config: BotConfig, llm: LLMClient) -> str`
-- [ ] Generate reply text based on personality
-- [ ] Implement `post_reply(driver, post_id: str, reply_text: str) -> bool`
-- [ ] Handle reply UI elements (click reply button, type, submit)
-- [ ] Add rate limiting checks
+- [x] Create `INSPIRATION_TWEET_PROMPT` in `src/core/prompts.py`
+- [x] Implement `generate_inspiration_tweet` in `src/core/llm.py`
+- [x] Create `process_inspiration_queue` job in `src/scheduler/jobs.py`
+- [x] Implement threshold logic (default: 10 posts)
+- [x] Integrate with main scheduler
+- [x] Add configuration options (`inspiration_batch_size`, `inspiration_check_minutes`)
+- [x] Add comprehensive test coverage (`tests/test_inspiration.py`)
+- [x] Fix function signature mismatch (wrapper function created)
+- [x] Fix login handling (proper `env_settings` parameter handling)
+- [x] Add rate limit check before posting
+- [x] Add system prompt to inspiration tweet generation
 
 **Dependencies:**
-- Interest detection
-- LLM Client
-- Posting infrastructure
+- ✅ Interest detection
+- ✅ LLM Client
+- ✅ Posting infrastructure
 
 ---
 
-#### 5. Notification Checking (`src/x/notifications.py`) 🟡 **MEDIUM**
-**Status:** ❌ Not Started  
+#### 5. Notification Checking (`src/x/notifications.py`) ✅ **COMPLETED**
+**Status:** ✅ Completed  
 **Priority:** High  
-**Estimated Effort:** 2-3 days
+**Estimated Effort:** 2-3 days (Completed)
 
 **Tasks:**
-- [ ] Create `src/x/notifications.py`
-- [ ] Implement `check_notifications(driver) -> list[Notification]`
-- [ ] Navigate to notifications page
-- [ ] Extract reply content and metadata
-- [ ] Create `Notification` Pydantic model
-- [ ] Filter for replies vs. other notifications
+- [x] Create `src/x/notifications.py`
+- [x] Implement `check_notifications(driver, config, count=20) -> list[Notification]`
+- [x] Navigate to notifications page (`https://x.com/notifications`)
+- [x] Extract reply content and metadata
+- [x] Create `Notification` Pydantic model in `src/state/models.py`
+- [x] Filter for replies vs. other notifications (replies and mentions only)
+- [x] Create `NotificationParser` class in `src/x/parser.py`
+- [x] Implement duplicate filtering by notification ID
+- [x] Integrate into scheduler job (`_check_notifications_async`)
+- [x] Store notifications in state queue (`notifications_queue`)
+- [x] Track processed notification IDs to avoid duplicates
+- [x] Update `last_notification_check_time` in state
 
 **Dependencies:**
-- Selenium driver
-- Notification data model
+- ✅ Selenium driver
+- ✅ Notification data model
 
 ---
 
@@ -332,21 +354,21 @@
 **Goal:** Enable intelligent post reactions
 
 1. ✅ Interest Detection (module complete, integrated into reading job)
-2. ❌ Reaction Writing
-3. ⚠️ Integration with scheduler (reading job integrated, reactions pending)
+2. ✅ Inspiration-based Posting (queue processing implemented)
+3. ✅ Integration with scheduler (reading and inspiration jobs integrated)
 
-**Deliverable:** Bot can react to interesting posts automatically
+**Deliverable:** Bot can generate inspired content from interesting posts automatically
 
 ---
 
 ### Phase 3: Notifications & Intent (Week 2)
 **Goal:** Enable reply handling
 
-1. ✅ Notification Checking
-2. ✅ Positive Intent Detection
-3. ✅ Reply Generation & Posting
+1. ✅ Notification Checking (implemented, queue ready for processing)
+2. ❌ Positive Intent Detection
+3. ❌ Reply Generation & Posting
 
-**Deliverable:** Bot can handle and reply to notifications
+**Deliverable:** Bot can check notifications and queue them for processing ✅ Partial
 
 ---
 
@@ -367,9 +389,9 @@
 |----------------|--------|----------------|
 | **Start** | ✅ Done | `main.py` |
 | **Random Read X posts** | ✅ Done | `src/x/reading.py` |
-| **Interest Check** | ✅ Done | `src/core/interest.py` (integration pending) |
-| **Write Reaction** | ❌ Missing | `src/x/reactions.py` |
-| **Check Replies/Notifications** | ❌ Missing | `src/x/notifications.py` |
+| **Interest Check** | ✅ Done | `src/core/interest.py` |
+| **Inspiration Posting** | ✅ Done | `src/scheduler/jobs.py` (Batch processing) |
+| **Check Replies/Notifications** | ✅ Done | `src/x/notifications.py` |
 | **Positive Intent Check** | ❌ Missing | `src/core/intent.py` |
 | **Reply based on Personality** | ❌ Missing | `src/x/reactions.py` |
 | **Personality Integration** | ⚠️ Partial | Config exists, not in reactions |
@@ -383,19 +405,23 @@
 ### Current Limitations
 - ✅ Automated scheduling implemented (scheduler system complete)
 - ✅ Post reading/scanning capability implemented
-- ✅ Post type detection implemented (skips non-text posts)
+- ✅ Post type detection implemented (skips non-text posts during reading)
 - ✅ Interest detection integrated into reading job
 - ✅ Interesting posts queue implemented (max 50 posts)
 - ✅ Structured logging for dashboard analytics
-- ⚠️ Reading job has dedicated `reading_check_minutes` config field
-- No reaction/reply functionality (queue ready for processing)
-- No notification handling (stub only)
+- ✅ Reading job has dedicated `reading_check_minutes` config field
+- ✅ Notification checking implemented (replies and mentions queued for processing)
+- ✅ Notifications queue implemented (max 50 notifications)
+- ✅ Processed notification IDs tracking (max 100 IDs)
+- No reaction/reply functionality (notifications queue ready for processing)
+- No positive intent detection (notifications queue ready for processing)
 - No memory/duplicate detection
-- Media-only posts are skipped (no text to evaluate)
-- Retweets without text are skipped
+- Media-only posts are skipped during reading (no text to evaluate) - working as intended
+- Retweets without text are skipped during reading - working as intended
 
 ### Technical Debt
 - ✅ Main loop refactored for scheduler integration
+- ✅ Inspiration queue processing bugs fixed (wrapper function and login handling)
 - LLM client needs embedding support (currently only generation)
 - State management needs counter reset logic (midnight UTC)
 - Error handling improved with graceful job failure handling
@@ -417,9 +443,9 @@
 - [x] Bot runs continuously with scheduler
 - [x] Bot reads frontpage posts periodically
 - [x] Bot identifies interesting posts (interest detection integrated, queue implemented)
-- [ ] Bot reacts to interesting posts automatically (queue ready for processing)
-- [ ] Bot checks for notifications periodically (stub implemented)
-- [ ] Bot replies to positive notifications
+- [x] Bot generates inspired content from interesting posts (batch processing implemented)
+- [x] Bot checks for notifications periodically (notifications checking implemented, queue ready for processing)
+- [ ] Bot replies to positive notifications (notifications queue ready, needs intent detection)
 - [ ] Bot avoids duplicate posts (memory integration)
 - [x] All rate limits enforced
 - [x] All compliance checks in place
@@ -429,6 +455,6 @@
 ## 📚 Related Documentation
 
 - See `.cursor/rules/project-rules.mdc` for coding standards
-- See `config/config.yaml` for configuration options
+- See `config/config.yaml` for configuration options (YAML format)
 - See `README.md` for setup instructions
 

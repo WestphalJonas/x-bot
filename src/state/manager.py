@@ -26,12 +26,12 @@ async def load_state(state_path: str | Path = "data/state.json") -> AgentState:
         return AgentState()
 
     try:
-        async with aiofiles.open(path, "r") as f:
+        async with aiofiles.open(path, "r", encoding="utf-8") as f:
             content = await f.read()
             data = json.loads(content)
             return AgentState(**data)
-    except (json.JSONDecodeError, ValidationError, OSError) as e:
-        # If file is corrupted, return default state
+    except (json.JSONDecodeError, ValidationError, OSError, UnicodeDecodeError) as e:
+        # If file is corrupted or has encoding issues, return default state
         # Log error would be added here with structured logging
         return AgentState()
 
@@ -54,7 +54,7 @@ async def save_state(
     temp_path = path.with_suffix(".tmp")
 
     try:
-        async with aiofiles.open(temp_path, "w") as f:
+        async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
             await f.write(state.model_dump_json(indent=2))
 
         # Atomic rename
@@ -64,4 +64,3 @@ async def save_state(
         if temp_path.exists():
             temp_path.unlink()
         raise
-

@@ -89,8 +89,9 @@ Respond with only "YES" if it matches, or "NO" if it doesn't."""
 
         # Log token usage for analytics
         if response.usage:
+            status = "MATCH" if matches else "NO_MATCH"
             logger.info(
-                "interest_check_completed",
+                f"interest_check_completed_{status}",
                 extra={
                     "post_id": post.post_id,
                     "username": post.username,

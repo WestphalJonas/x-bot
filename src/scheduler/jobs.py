@@ -177,6 +177,8 @@ async def _post_autonomous_tweet_async(
         raise
 
     finally:
+        # Close LLM client to prevent event loop errors
+        await llm_client.close()
         if driver:
             driver.quit()
             logger.info("browser_closed")
@@ -292,11 +294,23 @@ async def _read_frontpage_posts_async(
         # Evaluate posts for interest if LLM client is available
         interesting_posts = []
         if llm_client and posts:
+            # Load state to check for already-queued posts
+            state = await load_state()
+            queued_post_ids = {p["post_id"] for p in state.interesting_posts_queue}
+
             logger.info(
                 "evaluating_posts_for_interest", extra={"total_posts": len(posts)}
             )
 
             for post in posts:
+                # Skip posts already in queue
+                if post.post_id in queued_post_ids:
+                    logger.info(
+                        "post_skipped_already_in_queue",
+                        extra={"post_id": post.post_id, "username": post.username},
+                    )
+                    continue
+
                 try:
                     # Check if post is interesting
                     is_interesting = await check_interest(post, config, llm_client)
@@ -356,6 +370,20 @@ async def _read_frontpage_posts_async(
                 # Convert posts to dict for storage (Pydantic models need to be serialized)
                 post_dicts = [post.model_dump() for post in interesting_posts]
 
+                # Log each post being added to queue
+                for post in interesting_posts:
+                    logger.info(
+                        "interesting_post_added_to_queue",
+                        extra={
+                            "post_id": post.post_id,
+                            "username": post.username,
+                            "text_preview": post.text[:80] + "..."
+                            if len(post.text) > 80
+                            else post.text,
+                            "likes": post.likes,
+                        },
+                    )
+
                 # Append to queue with size limit (max 50 posts)
                 max_queue_size = 50
                 state.interesting_posts_queue.extend(post_dicts)
@@ -399,32 +427,29 @@ async def _read_frontpage_posts_async(
         raise
 
     finally:
+        # Close LLM client to prevent event loop errors
+        if llm_client:
+            await llm_client.close()
         if driver:
             driver.quit()
             logger.info("browser_closed")
 
 
 def check_notifications(config: BotConfig, env_settings: dict[str, Any]) -> None:
-    """Check notifications (scheduled job - stub implementation).
+    """Check notifications (scheduled job).
 
-    This will be implemented in Phase 3 (Notifications).
+    This function wraps async operations for APScheduler compatibility.
 
     Args:
         config: Bot configuration
-        env_settings: Dictionary with environment variables
+        env_settings: Dictionary with environment variables (API keys, credentials)
     """
     job_id = "check_notifications"
     logger.info("job_started", extra={"job_id": job_id})
 
     try:
-        logger.info(
-            "feature_not_implemented",
-            extra={
-                "job_id": job_id,
-                "feature": "check_notifications",
-                "phase": "Phase 3 - Notifications",
-            },
-        )
+        # Run async operations in event loop
+        asyncio.run(_check_notifications_async(config, env_settings))
         logger.info("job_completed", extra={"job_id": job_id})
 
     except Exception as e:
@@ -439,113 +464,331 @@ def check_notifications(config: BotConfig, env_settings: dict[str, Any]) -> None
         )
 
 
-async def process_inspiration_queue(
-    config: BotConfig,
-    state_manager: Any,  # Avoid circular import
-    llm_client: LLMClient,
-    driver_manager: Any,  # Avoid circular import
+async def _check_notifications_async(
+    config: BotConfig, env_settings: dict[str, Any]
 ) -> None:
-    """Process interesting posts queue to generate inspired content.
+    """Async implementation of notification checking.
 
     Args:
         config: Bot configuration
-        state_manager: State manager instance
-        llm_client: LLM client instance
-        driver_manager: Browser driver manager
+        env_settings: Dictionary with environment variables
     """
+    # Get environment variables
+    twitter_username = env_settings.get("TWITTER_USERNAME")
+    twitter_password = env_settings.get("TWITTER_PASSWORD")
+
+    if not twitter_username:
+        raise ValueError("TWITTER_USERNAME environment variable is required")
+    if not twitter_password:
+        raise ValueError("TWITTER_PASSWORD environment variable is required")
+
+    # Load state to check for processed notifications
+    state = await load_state()
+    processed_ids = set(state.processed_notification_ids)
+
+    # Initialize browser driver
+    logger.info("initializing_browser_for_notifications")
+    driver = None
     try:
-        state = await state_manager.load_state()
+        driver = create_driver(config)
 
-        # Check if we have enough posts in the queue
-        # Default threshold is 10 if not specified in config
-        threshold = config.scheduler.inspiration_batch_size
+        # Try to load cookies first
+        cookies_loaded = load_cookies(driver, config)
+        if not cookies_loaded:
+            # Login if cookies not available
+            logger.info("logging_in_for_notifications")
+            login_success = login(driver, twitter_username, twitter_password, config)
+            if not login_success:
+                logger.error("login_failed_for_notifications")
+                raise RuntimeError("Login failed for notification checking")
 
-        # Queue is stored as list of dicts in state.interesting_posts_queue
-        queue_size = len(state.interesting_posts_queue)
+            # Save cookies after successful login
+            save_cookies(driver)
 
-        if queue_size < threshold:
-            logger.info(
-                "inspiration_queue_below_threshold",
-                extra={
-                    "current_size": queue_size,
-                    "threshold": threshold,
-                },
-            )
-            return
+        # Check notifications
+        logger.info("checking_notifications")
+        from src.x.notifications import check_notifications as check_notifications_func
+
+        notifications = check_notifications_func(driver, config, count=20)
 
         logger.info(
-            "processing_inspiration_queue",
-            extra={"queue_size": queue_size},
+            "notifications_checked",
+            extra={
+                "count": len(notifications),
+                "notifications": [
+                    {
+                        "notification_id": notif.notification_id,
+                        "type": notif.type,
+                        "from_username": notif.from_username,
+                        "text_length": len(notif.text),
+                        "is_reply": notif.is_reply,
+                        "is_mention": notif.is_mention,
+                    }
+                    for notif in notifications
+                ],
+            },
         )
 
-        # Take the first batch of posts
-        # We need to convert dicts back to Post objects for the LLM client
-        from src.state.models import Post
+        # Filter out already processed notifications
+        new_notifications = [
+            n for n in notifications if n.notification_id not in processed_ids
+        ]
 
-        posts_batch_dicts = state.interesting_posts_queue[:threshold]
-        posts_batch = [Post(**p) for p in posts_batch_dicts]
+        logger.info(
+            "notifications_filtered",
+            extra={
+                "total": len(notifications),
+                "new": len(new_notifications),
+                "already_processed": len(notifications) - len(new_notifications),
+            },
+        )
 
-        # Generate inspired tweet
-        try:
-            tweet_text = await llm_client.generate_inspiration_tweet(posts_batch)
-            logger.info("inspiration_tweet_generated", extra={"tweet": tweet_text})
+        # Store new notifications in queue
+        if new_notifications:
+            # Convert notifications to dict for storage
+            notification_dicts = [n.model_dump() for n in new_notifications]
 
-            # Post the tweet
-            # We reuse the posting logic, but we need a driver
-            # Since this is an async job, we need to be careful with the driver
-            # For now, we'll assume the driver manager handles the session
-            # Note: driver_manager is likely just the create_driver function or similar in this context
-            # We'll create a new driver for this task
-            
-            logger.info("initializing_browser_for_inspiration")
-            driver = create_driver(config)
-            try:
-                # Load cookies/login
-                cookies_loaded = load_cookies(driver, config)
-                if not cookies_loaded:
-                    # We might need env settings here, but for now assume cookies exist or login works
-                    # This part might need refactoring to pass env settings if login is required
-                    pass
+            # Append to queue with size limit (max 50 notifications)
+            max_queue_size = 50
+            state.notifications_queue.extend(notification_dicts)
 
-                from src.x.posting import post_tweet
+            # Trim queue if it exceeds max size (keep most recent)
+            if len(state.notifications_queue) > max_queue_size:
+                state.notifications_queue = state.notifications_queue[-max_queue_size:]
+                logger.info(
+                    "notifications_queue_trimmed",
+                    extra={
+                        "max_size": max_queue_size,
+                        "trimmed_to": max_queue_size,
+                    },
+                )
 
-                success = post_tweet(driver, tweet_text, config)
+            # Update processed notification IDs (keep last 100)
+            new_ids = [
+                n.notification_id for n in new_notifications if n.notification_id
+            ]
+            state.processed_notification_ids.extend(new_ids)
+            if len(state.processed_notification_ids) > 100:
+                state.processed_notification_ids = state.processed_notification_ids[
+                    -100:
+                ]
 
-                if success:
-                    logger.info("inspiration_tweet_posted")
+            # Update last check time
+            state.last_notification_check_time = datetime.now(timezone.utc)
 
-                    # Update state: remove processed posts
-                    # We reload state to avoid race conditions
-                    current_state = await state_manager.load_state()
+            # Save state
+            await save_state(state)
 
-                    # Remove the first 'threshold' items
-                    # We assume the queue hasn't changed significantly (FIFO)
-                    if len(current_state.interesting_posts_queue) >= threshold:
-                        current_state.interesting_posts_queue = current_state.interesting_posts_queue[threshold:]
-
-                    # Increment post count
-                    current_state.counters["posts_today"] += 1
-                    current_state.last_post_time = datetime.now(timezone.utc)
-
-                    await state_manager.save_state(current_state)
-                else:
-                    logger.error("failed_to_post_inspiration_tweet")
-
-            finally:
-                driver.quit()
-
-        except Exception as e:
-            logger.error(
-                "inspiration_processing_error",
-                extra={"error": str(e)},
-                exc_info=True,
+            logger.info(
+                "notifications_queued",
+                extra={
+                    "new_notifications_added": len(new_notifications),
+                    "queue_size": len(state.notifications_queue),
+                },
             )
-            # Don't remove posts from queue if generation/posting failed
+        else:
+            # Still update last check time even if no new notifications
+            state.last_notification_check_time = datetime.now(timezone.utc)
+            await save_state(state)
+            logger.info("no_new_notifications")
+
+        logger.info("notification_checking_completed_successfully")
 
     except Exception as e:
         logger.error(
-            "inspiration_job_failed",
+            "notification_checking_error", extra={"error": str(e)}, exc_info=True
+        )
+        raise
+
+    finally:
+        if driver:
+            driver.quit()
+            logger.info("browser_closed")
+
+
+def process_inspiration_queue(config: BotConfig, env_settings: dict[str, Any]) -> None:
+    """Process inspiration queue (scheduled job).
+
+    This function wraps async operations for APScheduler compatibility.
+
+    Args:
+        config: Bot configuration
+        env_settings: Dictionary with environment variables (API keys, credentials)
+    """
+    job_id = "process_inspiration_queue"
+    logger.info("job_started", extra={"job_id": job_id})
+
+    try:
+        # Run async operations in event loop
+        asyncio.run(_process_inspiration_queue_async(config, env_settings))
+        logger.info("job_completed", extra={"job_id": job_id})
+
+    except Exception as e:
+        logger.error(
+            "job_failed",
+            extra={
+                "job_id": job_id,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            },
+            exc_info=True,
+        )
+
+
+async def _process_inspiration_queue_async(
+    config: BotConfig, env_settings: dict[str, Any]
+) -> None:
+    """Async implementation of inspiration queue processing.
+
+    Args:
+        config: Bot configuration
+        env_settings: Dictionary with environment variables
+    """
+    # Load state
+    state = await load_state()
+
+    # Check rate limits before processing
+    if state.counters["posts_today"] >= config.rate_limits.max_posts_per_day:
+        logger.warning(
+            "rate_limit_exceeded",
+            extra={
+                "posts_today": state.counters["posts_today"],
+                "max_posts": config.rate_limits.max_posts_per_day,
+            },
+        )
+        return
+
+    # Check if we have enough posts in the queue
+    # Default threshold is 10 if not specified in config
+    threshold = config.scheduler.inspiration_batch_size
+
+    # Queue is stored as list of dicts in state.interesting_posts_queue
+    queue_size = len(state.interesting_posts_queue)
+
+    if queue_size < threshold:
+        logger.info(
+            "inspiration_queue_below_threshold",
+            extra={
+                "current_size": queue_size,
+                "threshold": threshold,
+            },
+        )
+        return
+
+    logger.info(
+        "processing_inspiration_queue",
+        extra={"queue_size": queue_size},
+    )
+
+    # Get environment variables
+    openai_api_key = env_settings.get("OPENAI_API_KEY")
+    openrouter_api_key = env_settings.get("OPENROUTER_API_KEY")
+    twitter_username = env_settings.get("TWITTER_USERNAME")
+    twitter_password = env_settings.get("TWITTER_PASSWORD")
+
+    # Validate that at least one LLM provider is configured
+    if not openai_api_key and not openrouter_api_key:
+        logger.warning(
+            "no_llm_provider_configured",
+            extra={"detail": "Inspiration queue processing will be skipped"},
+        )
+        return
+
+    if not twitter_username:
+        raise ValueError("TWITTER_USERNAME environment variable is required")
+    if not twitter_password:
+        raise ValueError("TWITTER_PASSWORD environment variable is required")
+
+    # Initialize LLM client
+    llm_client = LLMClient(
+        config=config,
+        openai_api_key=openai_api_key,
+        openrouter_api_key=openrouter_api_key,
+    )
+
+    # Take the first batch of posts
+    # We need to convert dicts back to Post objects for the LLM client
+    from src.state.models import Post
+
+    posts_batch_dicts = state.interesting_posts_queue[:threshold]
+    posts_batch = [Post(**p) for p in posts_batch_dicts]
+
+    # Generate inspired tweet
+    try:
+        tweet_text = await llm_client.generate_inspiration_tweet(posts_batch)
+        logger.info("inspiration_tweet_generated", extra={"tweet": tweet_text})
+
+        # Validate tweet
+        is_valid, error_message = await llm_client.validate_tweet(tweet_text)
+        if not is_valid:
+            logger.error(
+                "inspiration_tweet_validation_failed", extra={"error": error_message}
+            )
+            raise ValueError(f"Inspiration tweet validation failed: {error_message}")
+
+        logger.info("inspiration_tweet_validated", extra={"length": len(tweet_text)})
+
+        # Initialize browser driver
+        logger.info("initializing_browser_for_inspiration")
+        driver = None
+        try:
+            driver = create_driver(config)
+
+            # Try to load cookies first
+            cookies_loaded = load_cookies(driver, config)
+            if not cookies_loaded:
+                # Login if cookies not available
+                logger.info("logging_in_for_inspiration")
+                login_success = login(
+                    driver, twitter_username, twitter_password, config
+                )
+                if not login_success:
+                    logger.error("login_failed_for_inspiration")
+                    raise RuntimeError("Login failed for inspiration queue processing")
+
+                # Save cookies after successful login
+                save_cookies(driver)
+
+            from src.x.posting import post_tweet
+
+            success = post_tweet(driver, tweet_text, config)
+
+            if success:
+                logger.info("inspiration_tweet_posted")
+
+                # Update state: remove processed posts
+                # We reload state to avoid race conditions
+                current_state = await load_state()
+
+                # Remove the first 'threshold' items
+                # We assume the queue hasn't changed significantly (FIFO)
+                if len(current_state.interesting_posts_queue) >= threshold:
+                    current_state.interesting_posts_queue = (
+                        current_state.interesting_posts_queue[threshold:]
+                    )
+
+                # Increment post count
+                current_state.counters["posts_today"] += 1
+                current_state.last_post_time = datetime.now(timezone.utc)
+
+                await save_state(current_state)
+            else:
+                logger.error("failed_to_post_inspiration_tweet")
+
+        finally:
+            if driver:
+                driver.quit()
+                logger.info("browser_closed")
+
+    except Exception as e:
+        logger.error(
+            "inspiration_processing_error",
             extra={"error": str(e)},
             exc_info=True,
         )
+        # Don't remove posts from queue if generation/posting failed
         raise
+
+    finally:
+        # Close LLM client to prevent event loop errors
+        await llm_client.close()
