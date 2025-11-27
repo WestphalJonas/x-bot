@@ -124,7 +124,7 @@ class PersonalityConfig(BaseModel):
     )
     style: Literal["concise", "detailed", "conversational"] = Field(default="concise")
     min_tweet_length: int = Field(default=180, ge=1, le=280)
-    max_tweet_length: int = Field(default=280, ge=180, le=280)
+    max_tweet_length: int = Field(default=400, ge=180, le=400)
 
 
 class BotConfig(BaseModel):

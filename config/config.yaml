@@ -28,7 +28,7 @@ scheduler:
   mention_check_minutes: 1  # 1 minute (reduced from 30 minutes)
   reading_check_minutes: 1  # 1 minute (reduced from 30 minutes)
   event_check_minutes: 1  # 1 minute (reduced from 15 minutes)
-  inspiration_check_minutes: 2 # 1 minute for testing
+  inspiration_check_minutes: 1 # 1 minute for testing
   inspiration_batch_size: 10
 
 personality:

@@ -11,7 +11,7 @@ Content Guidelines:
 - Tweet length: {min_tweet_length}-{max_tweet_length} characters
 - Create original, engaging content
 - Stay within Twitter/X terms of service
-- Include AI disclosure in profile bio"""
+- Do NOT use hashtags"""
 
 TWEET_GENERATION_PROMPT = "Generate a single, engaging tweet that follows all the guidelines above. Return only the tweet text, nothing else."
 
@@ -38,5 +38,8 @@ Personality:
 - Tone: {tone}
 - Style: {style}
 - Topics: {topics}
+
+Do NOT use hashtags.
+IMPORTANT: Keep your tweet under {max_tweet_length} characters!
 
 Return only the tweet text, nothing else."""

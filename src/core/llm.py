@@ -179,6 +179,7 @@ class LLMClient:
             tone=tone,
             style=style,
             topics=topics,
+            max_tweet_length=self.config.personality.max_tweet_length,
         )
 
         # Try primary provider first

@@ -713,20 +713,48 @@ async def _process_inspiration_queue_async(
     posts_batch_dicts = state.interesting_posts_queue[:threshold]
     posts_batch = [Post(**p) for p in posts_batch_dicts]
 
-    # Generate inspired tweet
+    # Generate inspired tweet with retry on validation failure
+    max_attempts = 3
+    tweet_text = None
+
     try:
-        tweet_text = await llm_client.generate_inspiration_tweet(posts_batch)
-        logger.info("inspiration_tweet_generated", extra={"tweet": tweet_text})
-
-        # Validate tweet
-        is_valid, error_message = await llm_client.validate_tweet(tweet_text)
-        if not is_valid:
-            logger.error(
-                "inspiration_tweet_validation_failed", extra={"error": error_message}
+        for attempt in range(1, max_attempts + 1):
+            tweet_text = await llm_client.generate_inspiration_tweet(posts_batch)
+            logger.info(
+                "inspiration_tweet_generated",
+                extra={
+                    "tweet": tweet_text,
+                    "attempt": attempt,
+                    "length": len(tweet_text),
+                },
             )
-            raise ValueError(f"Inspiration tweet validation failed: {error_message}")
 
-        logger.info("inspiration_tweet_validated", extra={"length": len(tweet_text)})
+            # Validate tweet
+            is_valid, error_message = await llm_client.validate_tweet(tweet_text)
+            if is_valid:
+                logger.info(
+                    "inspiration_tweet_validated", extra={"length": len(tweet_text)}
+                )
+                break
+
+            logger.warning(
+                "inspiration_tweet_validation_retry",
+                extra={
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "error": error_message,
+                    "length": len(tweet_text),
+                },
+            )
+
+            if attempt == max_attempts:
+                logger.error(
+                    "inspiration_tweet_validation_failed",
+                    extra={"error": error_message, "attempts": max_attempts},
+                )
+                raise ValueError(
+                    f"Inspiration tweet validation failed after {max_attempts} attempts: {error_message}"
+                )
 
         # Initialize browser driver
         logger.info("initializing_browser_for_inspiration")

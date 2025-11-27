@@ -118,9 +118,9 @@ def main():
     scheduler.setup_posting_job(
         create_job_wrapper(post_autonomous_tweet, config, env_settings)
     )
-    scheduler.setup_reading_job(
-        create_job_wrapper(read_frontpage_posts, config, env_settings)
-    )
+    # scheduler.setup_reading_job(
+    #     create_job_wrapper(read_frontpage_posts, config, env_settings)
+    # )
     # scheduler.setup_notifications_job(
     #     create_job_wrapper(check_notifications, config, env_settings)
     # )
