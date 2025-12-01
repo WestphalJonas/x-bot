@@ -15,7 +15,7 @@ from src.x.auth import load_cookies, login, save_cookies
 from src.x.driver import create_driver
 from src.x.posting import post_tweet
 from src.x.reading import read_frontpage_posts as read_posts_from_frontpage
-from src.web.data_tracker import log_rejected_tweet, log_written_tweet
+from src.web.data_tracker import log_written_tweet
 
 logger = logging.getLogger(__name__)
 
@@ -131,12 +131,29 @@ async def _post_autonomous_tweet_async(
     is_valid, error_message = await llm_client.validate_tweet(tweet_text)
     if not is_valid:
         logger.error("tweet_validation_failed", extra={"error": error_message})
-        # Log rejected tweet for dashboard
-        await log_rejected_tweet(
-            text=tweet_text,
-            reason=error_message,
-            operation="autonomous",
-        )
+        # Log rejected tweet for dashboard - save directly to ensure persistence
+        try:
+            state = await load_state()
+            entry = {
+                "text": tweet_text,
+                "reason": error_message,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "operation": "autonomous",
+            }
+            state.rejected_tweets.append(entry)
+            # Keep only last 50 entries
+            if len(state.rejected_tweets) > 50:
+                state.rejected_tweets = state.rejected_tweets[-50:]
+            await save_state(state)
+            # Give I/O time to complete before raising exception
+            await asyncio.sleep(0.1)
+            logger.info("rejected_tweet_saved", extra={"reason": error_message})
+        except Exception as save_error:
+            logger.error(
+                "failed_to_save_rejected_tweet",
+                extra={"error": str(save_error)},
+                exc_info=True,
+            )
         raise ValueError(f"Tweet validation failed: {error_message}")
 
     logger.info("tweet_validated", extra={"length": len(tweet_text)})
@@ -765,12 +782,29 @@ async def _process_inspiration_queue_async(
                     "inspiration_tweet_validation_failed",
                     extra={"error": error_message, "attempts": max_attempts},
                 )
-                # Log rejected tweet for dashboard
-                await log_rejected_tweet(
-                    text=tweet_text,
-                    reason=error_message,
-                    operation="inspiration",
-                )
+                # Log rejected tweet for dashboard - save directly to ensure persistence
+                try:
+                    state = await load_state()
+                    entry = {
+                        "text": tweet_text,
+                        "reason": error_message,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "operation": "inspiration",
+                    }
+                    state.rejected_tweets.append(entry)
+                    # Keep only last 50 entries
+                    if len(state.rejected_tweets) > 50:
+                        state.rejected_tweets = state.rejected_tweets[-50:]
+                    await save_state(state)
+                    # Give I/O time to complete before raising exception
+                    await asyncio.sleep(0.1)
+                    logger.info("rejected_tweet_saved", extra={"reason": error_message})
+                except Exception as save_error:
+                    logger.error(
+                        "failed_to_save_rejected_tweet",
+                        extra={"error": str(save_error)},
+                        exc_info=True,
+                    )
                 raise ValueError(
                     f"Inspiration tweet validation failed after {max_attempts} attempts: {error_message}"
                 )
