@@ -1,18 +1,41 @@
 """LLM integration for tweet generation with multi-provider support."""
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from src.core.config import BotConfig
+from src.core.prompts import (
+    BRAND_CHECK_PROMPT,
+    INSPIRATION_TWEET_PROMPT,
+    TWEET_GENERATION_PROMPT,
+)
 from src.state.models import Post
+from src.web.data_tracker import log_token_usage
 
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+# Optional imports for additional providers
+try:
+    import google.generativeai as genai
+
+    GOOGLE_AVAILABLE = True
+except ImportError:
+    genai = None
+    GOOGLE_AVAILABLE = False
+
+try:
+    from anthropic import AsyncAnthropic
+
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    AsyncAnthropic = None
+    ANTHROPIC_AVAILABLE = False
 
 
 def is_rate_limit_but_not_quota(exception: Exception) -> bool:
@@ -31,20 +54,31 @@ def is_rate_limit_but_not_quota(exception: Exception) -> bool:
 
 
 class LLMClient:
-    """Multi-provider LLM client with automatic fallback support."""
+    """Multi-provider LLM client with automatic fallback support.
+
+    Supports the following providers:
+    - OpenAI (openai)
+    - OpenRouter (openrouter)
+    - Google Gemini (google) - requires google-generativeai package
+    - Anthropic Claude (anthropic) - requires anthropic package
+    """
 
     def __init__(
         self,
         config: BotConfig,
         openai_api_key: str | None = None,
         openrouter_api_key: str | None = None,
+        google_api_key: str | None = None,
+        anthropic_api_key: str | None = None,
     ):
-        """Initialize LLM client with provider support.
+        """Initialize LLM client with multi-provider support.
 
         Args:
             config: Bot configuration
             openai_api_key: OpenAI API key (optional)
             openrouter_api_key: OpenRouter API key (optional)
+            google_api_key: Google AI API key (optional)
+            anthropic_api_key: Anthropic API key (optional)
         """
         self.config = config
         self.model = config.llm.model
@@ -52,8 +86,13 @@ class LLMClient:
         self.temperature = config.llm.temperature
 
         # Initialize clients for each provider
-        self.openai_client = None
-        self.openrouter_client = None
+        self.openai_client: AsyncOpenAI | None = None
+        self.openrouter_client: AsyncOpenAI | None = None
+        self.google_model: Any = None
+        self.anthropic_client: Any = None
+
+        # Store API keys for providers that need them per-request
+        self._google_api_key = google_api_key
 
         if openai_api_key:
             self.openai_client = AsyncOpenAI(api_key=openai_api_key)
@@ -63,20 +102,76 @@ class LLMClient:
                 api_key=openrouter_api_key, base_url="https://openrouter.ai/api/v1"
             )
 
+        if google_api_key and GOOGLE_AVAILABLE and genai is not None:
+            genai.configure(api_key=google_api_key)
+            # Use the model from config or default to gemini-1.5-flash
+            google_model_name = self._get_google_model_name()
+            self.google_model = genai.GenerativeModel(google_model_name)
+            logger.info("google_client_initialized", extra={"model": google_model_name})
+
+        if anthropic_api_key and ANTHROPIC_AVAILABLE and AsyncAnthropic is not None:
+            self.anthropic_client = AsyncAnthropic(api_key=anthropic_api_key)
+            logger.info("anthropic_client_initialized")
+
+    def _get_google_model_name(self) -> str:
+        """Get the Google model name from config or default."""
+        model = self.model
+        # If model is in format "google/gemini-1.5-flash", extract the model name
+        if model.startswith("google/"):
+            return model.replace("google/", "")
+        # If model is a Google model name, use it directly
+        if model.startswith("gemini"):
+            return model
+        # Default to gemini-1.5-flash
+        return "gemini-1.5-flash"
+
+    def _get_anthropic_model_name(self) -> str:
+        """Get the Anthropic model name from config or default."""
+        model = self.model
+        # If model is in format "anthropic/claude-3-haiku", extract the model name
+        if model.startswith("anthropic/"):
+            return model.replace("anthropic/", "")
+        # If model is a Claude model name, use it directly
+        if model.startswith("claude"):
+            return model
+        # Default to claude-3-haiku
+        return "claude-3-haiku-20240307"
+
     def _get_client(self, provider: str) -> AsyncOpenAI | None:
-        """Get client for specific provider.
+        """Get OpenAI-compatible client for specific provider.
 
         Args:
-            provider: Provider name ("openai" or "openrouter")
+            provider: Provider name ("openai", "openrouter", "google", "anthropic")
 
         Returns:
-            AsyncOpenAI client or None if not available
+            AsyncOpenAI client or None if not available.
+            For Google and Anthropic, returns None (handled separately).
         """
         if provider == "openai":
             return self.openai_client
         elif provider == "openrouter":
             return self.openrouter_client
+        # Google and Anthropic use their own clients, not OpenAI-compatible
         return None
+
+    def _has_provider(self, provider: str) -> bool:
+        """Check if a provider is available.
+
+        Args:
+            provider: Provider name
+
+        Returns:
+            True if provider is configured and available
+        """
+        if provider == "openai":
+            return self.openai_client is not None
+        elif provider == "openrouter":
+            return self.openrouter_client is not None
+        elif provider == "google":
+            return self.google_model is not None
+        elif provider == "anthropic":
+            return self.anthropic_client is not None
+        return False
 
     async def close(self) -> None:
         """Close all async clients to prevent event loop errors."""
@@ -84,6 +179,8 @@ class LLMClient:
             await self.openai_client.close()
         if self.openrouter_client:
             await self.openrouter_client.close()
+        if self.anthropic_client:
+            await self.anthropic_client.close()
 
     async def generate_tweet(self, system_prompt: str) -> str:
         """Generate a tweet with automatic fallback to backup providers.
@@ -104,8 +201,7 @@ class LLMClient:
         last_error = None
 
         for provider in providers:
-            client = self._get_client(provider)
-            if not client:
+            if not self._has_provider(provider):
                 logger.warning(
                     "provider_not_available",
                     extra={
@@ -116,9 +212,25 @@ class LLMClient:
                 continue
 
             try:
-                tweet = await self._generate_with_provider(
-                    client, provider, system_prompt, operation="generate"
-                )
+                # Handle Google and Anthropic separately
+                if provider == "google":
+                    tweet = await self._generate_with_google(
+                        system_prompt, TWEET_GENERATION_PROMPT, "generate"
+                    )
+                elif provider == "anthropic":
+                    tweet = await self._generate_with_anthropic(
+                        system_prompt, TWEET_GENERATION_PROMPT, "generate"
+                    )
+                else:
+                    # OpenAI-compatible providers
+                    client = self._get_client(provider)
+                    if client:
+                        tweet = await self._generate_with_provider(
+                            client, provider, system_prompt, operation="generate"
+                        )
+                    else:
+                        continue
+
                 logger.info("llm_success", extra={"provider": provider})
                 return tweet
             except (AuthenticationError, RateLimitError) as e:
@@ -164,8 +276,6 @@ class LLMClient:
         Returns:
             Generated tweet text
         """
-        from src.core.prompts import INSPIRATION_TWEET_PROMPT
-
         # Get system prompt with personality settings
         system_prompt = self.config.get_system_prompt()
 
@@ -194,8 +304,7 @@ class LLMClient:
         last_error = None
 
         for provider in providers:
-            client = self._get_client(provider)
-            if not client:
+            if not self._has_provider(provider):
                 logger.warning(
                     "provider_not_available",
                     extra={
@@ -206,15 +315,30 @@ class LLMClient:
                 continue
 
             try:
-                tweet = await self._generate_with_provider(
-                    client,
-                    provider,
-                    system_prompt,
-                    user_prompt=user_prompt,
-                    operation="inspiration",
-                )
+                # Handle Google and Anthropic separately
+                if provider == "google":
+                    tweet = await self._generate_with_google(
+                        system_prompt, user_prompt, "inspiration"
+                    )
+                elif provider == "anthropic":
+                    tweet = await self._generate_with_anthropic(
+                        system_prompt, user_prompt, "inspiration"
+                    )
+                else:
+                    # OpenAI-compatible providers
+                    client = self._get_client(provider)
+                    if client:
+                        tweet = await self._generate_with_provider(
+                            client,
+                            provider,
+                            system_prompt,
+                            user_prompt=user_prompt,
+                            operation="inspiration",
+                        )
+                    else:
+                        continue
+
                 logger.info("inspiration_llm_success", extra={"provider": provider})
-                # Validate the generated tweet (basic validation, not full async validate_tweet)
                 return tweet.strip()
             except Exception as e:
                 last_error = e
@@ -263,8 +387,6 @@ class LLMClient:
         Returns:
             Generated tweet text
         """
-        from src.core.prompts import TWEET_GENERATION_PROMPT
-
         if user_prompt is None:
             user_prompt = TWEET_GENERATION_PROMPT
 
@@ -303,8 +425,6 @@ class LLMClient:
 
             # Log to dashboard tracker
             try:
-                from src.web.data_tracker import log_token_usage
-
                 await log_token_usage(
                     provider=provider,
                     model=model,
@@ -316,6 +436,147 @@ class LLMClient:
             except Exception as e:
                 # Don't fail the generation if tracking fails
                 logger.debug("token_tracking_failed", extra={"error": str(e)})
+
+        return tweet
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    async def _generate_with_google(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        operation: str = "generate",
+    ) -> str:
+        """Generate tweet using Google Gemini.
+
+        Args:
+            system_prompt: System prompt with personality and guidelines
+            user_prompt: User prompt for generation
+            operation: Operation type for tracking
+
+        Returns:
+            Generated tweet text
+
+        Raises:
+            RuntimeError: If Google client is not available
+        """
+        if not self.google_model or not GOOGLE_AVAILABLE:
+            raise RuntimeError("Google Gemini client not available")
+
+        # Combine system and user prompts for Gemini
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        # Generate content using Gemini
+        response = await self.google_model.generate_content_async(
+            full_prompt,
+            generation_config={
+                "max_output_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            },
+        )
+
+        tweet = response.text.strip()
+        model_name = self._get_google_model_name()
+
+        logger.info(
+            "llm_call",
+            extra={
+                "provider": "google",
+                "model": model_name,
+                "operation": operation,
+            },
+        )
+
+        # Log to dashboard tracker (Google doesn't provide detailed token counts)
+        try:
+            from src.web.data_tracker import log_token_usage
+
+            # Estimate tokens (rough approximation)
+            prompt_tokens = len(full_prompt) // 4
+            completion_tokens = len(tweet) // 4
+
+            await log_token_usage(
+                provider="google",
+                model=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+                operation=operation,
+            )
+        except Exception as e:
+            logger.debug("token_tracking_failed", extra={"error": str(e)})
+
+        return tweet
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    async def _generate_with_anthropic(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        operation: str = "generate",
+    ) -> str:
+        """Generate tweet using Anthropic Claude.
+
+        Args:
+            system_prompt: System prompt with personality and guidelines
+            user_prompt: User prompt for generation
+            operation: Operation type for tracking
+
+        Returns:
+            Generated tweet text
+
+        Raises:
+            RuntimeError: If Anthropic client is not available
+        """
+        if not self.anthropic_client or not ANTHROPIC_AVAILABLE:
+            raise RuntimeError("Anthropic client not available")
+
+        model_name = self._get_anthropic_model_name()
+
+        response = await self.anthropic_client.messages.create(
+            model=model_name,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+
+        tweet = response.content[0].text.strip()
+
+        # Log token usage
+        logger.info(
+            "llm_call",
+            extra={
+                "provider": "anthropic",
+                "model": model_name,
+                "tokens": response.usage.input_tokens + response.usage.output_tokens,
+                "prompt_tokens": response.usage.input_tokens,
+                "completion_tokens": response.usage.output_tokens,
+                "operation": operation,
+            },
+        )
+
+        # Log to dashboard tracker
+        try:
+            from src.web.data_tracker import log_token_usage
+
+            await log_token_usage(
+                provider="anthropic",
+                model=model_name,
+                prompt_tokens=response.usage.input_tokens,
+                completion_tokens=response.usage.output_tokens,
+                total_tokens=response.usage.input_tokens + response.usage.output_tokens,
+                operation=operation,
+            )
+        except Exception as e:
+            logger.debug("token_tracking_failed", extra={"error": str(e)})
 
         return tweet
 
@@ -376,8 +637,6 @@ class LLMClient:
         tone = self.config.personality.tone
         style = self.config.personality.style
         topics = ", ".join(self.config.personality.topics)
-
-        from src.core.prompts import BRAND_CHECK_PROMPT
 
         prompt = BRAND_CHECK_PROMPT.format(
             tone=tone,

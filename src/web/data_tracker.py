@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
+from src.constants import QueueLimits
 from src.state.manager import load_state, save_state
 
 
@@ -38,9 +39,9 @@ async def log_token_usage(
 
     state.token_usage_log.append(entry)
 
-    # Keep only last 100 entries
-    if len(state.token_usage_log) > 100:
-        state.token_usage_log = state.token_usage_log[-100:]
+    # Keep only recent entries
+    if len(state.token_usage_log) > QueueLimits.TOKEN_USAGE_LOG:
+        state.token_usage_log = state.token_usage_log[-QueueLimits.TOKEN_USAGE_LOG:]
 
     await save_state(state)
 
@@ -70,9 +71,9 @@ async def log_written_tweet(
 
     state.written_tweets.append(entry)
 
-    # Keep only last 50 entries
-    if len(state.written_tweets) > 50:
-        state.written_tweets = state.written_tweets[-50:]
+    # Keep only recent entries
+    if len(state.written_tweets) > QueueLimits.WRITTEN_TWEETS:
+        state.written_tweets = state.written_tweets[-QueueLimits.WRITTEN_TWEETS:]
 
     await save_state(state)
 
@@ -100,8 +101,8 @@ async def log_rejected_tweet(
 
     state.rejected_tweets.append(entry)
 
-    # Keep only last 50 entries
-    if len(state.rejected_tweets) > 50:
-        state.rejected_tweets = state.rejected_tweets[-50:]
+    # Keep only recent entries
+    if len(state.rejected_tweets) > QueueLimits.REJECTED_TWEETS:
+        state.rejected_tweets = state.rejected_tweets[-QueueLimits.REJECTED_TWEETS:]
 
     await save_state(state)

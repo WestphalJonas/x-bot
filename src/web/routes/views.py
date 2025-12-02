@@ -1,23 +1,30 @@
 """HTML view routes for the X bot dashboard."""
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from src.state.manager import load_state
-from src.web.app import get_chroma_memory, get_config
+from src.web.app import ChromaMemoryDep, ConfigDep, get_chroma_memory, get_config
+
+if TYPE_CHECKING:
+    from src.memory.chroma_client import ChromaMemory
 
 router = APIRouter()
 
 
 @router.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request) -> HTMLResponse:
+async def dashboard(
+    request: Request,
+    config: ConfigDep,
+    memory: ChromaMemoryDep = None,
+) -> HTMLResponse:
     """Main dashboard overview page."""
     templates = request.app.state.templates
 
     # Get state for overview stats
     state = await load_state()
-    config = get_config()
-    memory = get_chroma_memory()
 
     memory_stats = None
     if memory is not None:
@@ -68,10 +75,12 @@ async def analytics_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/partials/posts/read", response_class=HTMLResponse)
-async def posts_read_partial(request: Request) -> HTMLResponse:
+async def posts_read_partial(
+    request: Request,
+    memory: ChromaMemoryDep = None,
+) -> HTMLResponse:
     """Partial for read posts list (HTMX)."""
     templates = request.app.state.templates
-    memory = get_chroma_memory()
 
     posts = []
     total = 0
@@ -121,12 +130,14 @@ async def posts_read_partial(request: Request) -> HTMLResponse:
 
 
 @router.get("/partials/posts/written", response_class=HTMLResponse)
-async def posts_written_partial(request: Request) -> HTMLResponse:
+async def posts_written_partial(
+    request: Request,
+    memory: ChromaMemoryDep = None,
+) -> HTMLResponse:
     """Partial for written tweets list (HTMX)."""
     templates = request.app.state.templates
 
     state = await load_state()
-    memory = get_chroma_memory()
 
     tweets = []
 

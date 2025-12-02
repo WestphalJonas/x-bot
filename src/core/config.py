@@ -2,10 +2,24 @@
 
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypedDict
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
+
+
+class EnvSettings(TypedDict, total=False):
+    """Type definition for environment settings dictionary.
+
+    All keys are optional (total=False) since some providers may not be configured.
+    """
+
+    OPENAI_API_KEY: str | None
+    OPENROUTER_API_KEY: str | None
+    GOOGLE_API_KEY: str | None
+    ANTHROPIC_API_KEY: str | None
+    TWITTER_USERNAME: str | None
+    TWITTER_PASSWORD: str | None
 
 
 class RateLimitsConfig(BaseModel):

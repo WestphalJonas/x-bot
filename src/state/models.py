@@ -23,6 +23,9 @@ class AgentState(BaseModel):
     last_post_time: datetime | None = Field(
         default=None, description="Timestamp of last post"
     )
+    last_counter_reset: datetime | None = Field(
+        default=None, description="Timestamp of last counter reset (UTC date)"
+    )
     mood: str = Field(
         default="neutral", description="Current mood state (for future use)"
     )

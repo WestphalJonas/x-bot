@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from src.core.config import BotConfig
+from src.core.config import BotConfig, EnvSettings
 from src.scheduler import BotScheduler
 from src.scheduler.bot_scheduler import get_job_lock
 from src.scheduler.jobs import (
@@ -26,25 +26,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_env_settings() -> dict[str, str | None]:
-    """Load environment variables into a dictionary.
+def load_env_settings() -> EnvSettings:
+    """Load environment variables into a typed dictionary.
 
     Returns:
-        Dictionary with environment variable values
+        EnvSettings dictionary with environment variable values
     """
-    return {
-        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
-        "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY"),
-        "TWITTER_USERNAME": os.getenv("TWITTER_USERNAME"),
-        "TWITTER_PASSWORD": os.getenv("TWITTER_PASSWORD"),
-    }
+    return EnvSettings(
+        OPENAI_API_KEY=os.getenv("OPENAI_API_KEY"),
+        OPENROUTER_API_KEY=os.getenv("OPENROUTER_API_KEY"),
+        GOOGLE_API_KEY=os.getenv("GOOGLE_API_KEY"),
+        ANTHROPIC_API_KEY=os.getenv("ANTHROPIC_API_KEY"),
+        TWITTER_USERNAME=os.getenv("TWITTER_USERNAME"),
+        TWITTER_PASSWORD=os.getenv("TWITTER_PASSWORD"),
+    )
 
 
-def validate_env_settings(env_settings: dict[str, str | None]) -> None:
+def validate_env_settings(env_settings: EnvSettings) -> None:
     """Validate that required environment variables are set.
 
     Args:
-        env_settings: Dictionary with environment variables
+        env_settings: Typed dictionary with environment variables
 
     Raises:
         ValueError: If required environment variables are missing
@@ -65,7 +67,7 @@ def validate_env_settings(env_settings: dict[str, str | None]) -> None:
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
 
-def create_job_wrapper(job_func, config: BotConfig, env_settings: dict):
+def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
     """Create a wrapper function for a job that passes config and env_settings.
 
     Uses a global lock to prevent parallel job execution.
@@ -73,7 +75,7 @@ def create_job_wrapper(job_func, config: BotConfig, env_settings: dict):
     Args:
         job_func: Job function to wrap
         config: Bot configuration
-        env_settings: Environment settings dictionary
+        env_settings: Typed environment settings dictionary
 
     Returns:
         Wrapped function that can be called without arguments
@@ -118,12 +120,12 @@ def main():
     scheduler.setup_posting_job(
         create_job_wrapper(post_autonomous_tweet, config, env_settings)
     )
-    # scheduler.setup_reading_job(
-    #     create_job_wrapper(read_frontpage_posts, config, env_settings)
-    # )
-    # scheduler.setup_notifications_job(
-    #     create_job_wrapper(check_notifications, config, env_settings)
-    # )
+    scheduler.setup_reading_job(
+        create_job_wrapper(read_frontpage_posts, config, env_settings)
+    )
+    scheduler.setup_notifications_job(
+        create_job_wrapper(check_notifications, config, env_settings)
+    )
     scheduler.setup_inspiration_job(
         create_job_wrapper(process_inspiration_queue, config, env_settings)
     )

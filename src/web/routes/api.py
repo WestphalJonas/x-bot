@@ -1,13 +1,16 @@
 """API routes for the X bot dashboard."""
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from src.state.manager import load_state
-from src.web.app import get_chroma_memory, get_config
+from src.web.app import ChromaMemoryDep, ConfigDep, get_chroma_memory, get_config
+
+if TYPE_CHECKING:
+    from src.memory.chroma_client import ChromaMemory
 
 router = APIRouter()
 
@@ -93,9 +96,11 @@ class StateResponse(BaseModel):
 
 
 @router.get("/posts/read", response_model=PostsListResponse)
-async def get_read_posts(limit: int = 50) -> PostsListResponse:
+async def get_read_posts(
+    limit: int = 50,
+    memory: ChromaMemoryDep = None,
+) -> PostsListResponse:
     """Get last read posts from ChromaDB."""
-    memory = get_chroma_memory()
 
     if memory is None:
         return PostsListResponse(posts=[], total=0)
@@ -137,7 +142,10 @@ async def get_read_posts(limit: int = 50) -> PostsListResponse:
 
 
 @router.get("/posts/written", response_model=WrittenTweetsListResponse)
-async def get_written_tweets(limit: int = 50) -> WrittenTweetsListResponse:
+async def get_written_tweets(
+    limit: int = 50,
+    memory: ChromaMemoryDep = None,
+) -> WrittenTweetsListResponse:
     """Get written/posted tweets from state and ChromaDB."""
     # First try to get from state (more recent with metadata)
     state = await load_state()
@@ -159,7 +167,6 @@ async def get_written_tweets(limit: int = 50) -> WrittenTweetsListResponse:
         )
 
     # Also try to get from ChromaDB for historical data
-    memory = get_chroma_memory()
     tweets_from_chroma = []
 
     if memory is not None:
@@ -292,10 +299,9 @@ async def get_token_analytics() -> TokenAnalyticsResponse:
 
 
 @router.get("/state", response_model=StateResponse)
-async def get_state() -> StateResponse:
+async def get_state(memory: ChromaMemoryDep = None) -> StateResponse:
     """Get current bot state."""
     state = await load_state()
-    memory = get_chroma_memory()
 
     memory_stats = None
     if memory is not None:

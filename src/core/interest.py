@@ -7,6 +7,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 from src.core.config import BotConfig
 from src.core.llm import LLMClient, is_rate_limit_but_not_quota
 from src.state.models import Post
+from src.web.data_tracker import log_token_usage
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +107,6 @@ Respond with only "YES" if it matches, or "NO" if it doesn't."""
 
             # Log to dashboard tracker
             try:
-                from src.web.data_tracker import log_token_usage
-
                 await log_token_usage(
                     provider=llm_client.config.llm.provider,
                     model=llm_client.model,

@@ -2,10 +2,12 @@
 
 import os
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Annotated
 
-from fastapi import FastAPI
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -20,57 +22,65 @@ except ImportError:
     ChromaMemory = None  # type: ignore
     CHROMA_AVAILABLE = False
 
-# Module-level globals for shared resources
-_config: BotConfig | None = None
-_chroma_memory: "ChromaMemory | None" = None
-
 # Paths
 WEB_DIR = Path(__file__).parent
 TEMPLATES_DIR = WEB_DIR / "templates"
 STATIC_DIR = WEB_DIR / "static"
 
 
+@lru_cache
 def get_config() -> BotConfig:
-    """Get the loaded bot configuration."""
-    global _config
-    if _config is None:
-        _config = BotConfig.load()
-    return _config
+    """Get the loaded bot configuration.
+
+    Uses lru_cache to ensure only one config instance is created.
+    This is the proper FastAPI dependency injection pattern.
+    """
+    return BotConfig.load()
 
 
-def get_chroma_memory():
-    """Get the ChromaDB memory client if available."""
-    global _chroma_memory
-    if not CHROMA_AVAILABLE:
+@lru_cache
+def get_chroma_memory() -> "ChromaMemory | None":
+    """Get the ChromaDB memory client if available.
+
+    Uses lru_cache to ensure only one memory client instance is created.
+    Returns None if ChromaDB is not available or no API key is configured.
+    """
+    if not CHROMA_AVAILABLE or ChromaMemory is None:
         return None
-    if _chroma_memory is None:
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        if openai_api_key and ChromaMemory is not None:
-            _chroma_memory = ChromaMemory(
-                config=get_config(),
-                openai_api_key=openai_api_key,
-            )
-    return _chroma_memory
+
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        return None
+
+    try:
+        return ChromaMemory(
+            config=get_config(),
+            openai_api_key=openai_api_key,
+        )
+    except Exception:
+        return None
+
+
+# Type aliases for dependency injection
+ConfigDep = Annotated[BotConfig, Depends(get_config)]
+ChromaMemoryDep = Annotated["ChromaMemory | None", Depends(get_chroma_memory)]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
-    # Startup: Load configuration and initialize resources
-    from dotenv import load_dotenv
-
+    # Startup: Load environment variables
     load_dotenv()
 
-    # Pre-load config
+    # Pre-load config and chroma memory to warm up the cache
     get_config()
-
-    # Try to initialize ChromaDB (optional - may not have API key)
     get_chroma_memory()
 
     yield
 
-    # Shutdown: cleanup if needed
-    pass
+    # Shutdown: Clear caches
+    get_config.cache_clear()
+    get_chroma_memory.cache_clear()
 
 
 def create_app() -> FastAPI:

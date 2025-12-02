@@ -3,24 +3,33 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any
-
 from openai import AuthenticationError, RateLimitError
 
-from src.core.config import BotConfig
+from src.constants import QueueLimits
+from src.core.config import BotConfig, EnvSettings
 from src.core.interest import check_interest
 from src.core.llm import LLMClient
 from src.state.manager import load_state, save_state
-from src.x.auth import load_cookies, login, save_cookies
-from src.x.driver import create_driver
+from src.state.models import Post
+
+# Optional ChromaDB import for duplicate detection
+try:
+    from src.memory.chroma_client import ChromaMemory
+
+    CHROMA_AVAILABLE = True
+except ImportError:
+    ChromaMemory = None  # type: ignore
+    CHROMA_AVAILABLE = False
+from src.x.notifications import check_notifications as check_notifications_func
 from src.x.posting import post_tweet
 from src.x.reading import read_frontpage_posts as read_posts_from_frontpage
+from src.x.session import AsyncTwitterSession
 from src.web.data_tracker import log_written_tweet
 
 logger = logging.getLogger(__name__)
 
 
-def post_autonomous_tweet(config: BotConfig, env_settings: dict[str, Any]) -> None:
+def post_autonomous_tweet(config: BotConfig, env_settings: EnvSettings) -> None:
     """Post an autonomous tweet (scheduled job).
 
     This function wraps async operations for APScheduler compatibility.
@@ -51,7 +60,7 @@ def post_autonomous_tweet(config: BotConfig, env_settings: dict[str, Any]) -> No
 
 
 async def _post_autonomous_tweet_async(
-    config: BotConfig, env_settings: dict[str, Any]
+    config: BotConfig, env_settings: EnvSettings
 ) -> None:
     """Async implementation of autonomous tweet posting.
 
@@ -59,8 +68,10 @@ async def _post_autonomous_tweet_async(
         config: Bot configuration
         env_settings: Dictionary with environment variables
     """
-    # Load state
-    state = await load_state()
+    # Load state (with automatic counter reset check)
+    state = await load_state(
+        reset_time_utc=config.rate_limits.reset_time_utc,
+    )
 
     # Check rate limits
     if state.counters["posts_today"] >= config.rate_limits.max_posts_per_day:
@@ -90,11 +101,17 @@ async def _post_autonomous_tweet_async(
     if not twitter_password:
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
+    # Get all API keys
+    google_api_key = env_settings.get("GOOGLE_API_KEY")
+    anthropic_api_key = env_settings.get("ANTHROPIC_API_KEY")
+
     # Initialize LLM client
     llm_client = LLMClient(
         config=config,
         openai_api_key=openai_api_key,
         openrouter_api_key=openrouter_api_key,
+        google_api_key=google_api_key,
+        anthropic_api_key=anthropic_api_key,
     )
 
     # Get system prompt
@@ -127,6 +144,43 @@ async def _post_autonomous_tweet_async(
         logger.error("tweet_generation_failed", extra={"error": str(e)}, exc_info=True)
         raise
 
+    # Check for duplicate using ChromaDB if available
+    chroma_memory = None
+    if CHROMA_AVAILABLE and openai_api_key and ChromaMemory is not None:
+        try:
+            chroma_memory = ChromaMemory(
+                config=config,
+                openai_api_key=openai_api_key,
+            )
+            is_duplicate, similarity = await chroma_memory.check_duplicate(tweet_text)
+            if is_duplicate:
+                logger.warning(
+                    "duplicate_tweet_detected",
+                    extra={
+                        "similarity": similarity,
+                        "threshold": config.llm.similarity_threshold,
+                    },
+                )
+                # Regenerate tweet
+                logger.info("regenerating_tweet_due_to_duplicate")
+                tweet_text = await llm_client.generate_tweet(system_prompt)
+                # Check again (simple retry, not infinite loop)
+                is_duplicate, similarity = await chroma_memory.check_duplicate(
+                    tweet_text
+                )
+                if is_duplicate:
+                    raise ValueError(
+                        f"Generated tweet is too similar to existing content (similarity: {similarity:.2f})"
+                    )
+        except ValueError:
+            raise  # Re-raise duplicate error
+        except Exception as e:
+            logger.warning(
+                "chroma_duplicate_check_failed",
+                extra={"error": str(e)},
+            )
+            # Continue without duplicate check if ChromaDB fails
+
     # Validate tweet
     is_valid, error_message = await llm_client.validate_tweet(tweet_text)
     if not is_valid:
@@ -141,9 +195,11 @@ async def _post_autonomous_tweet_async(
                 "operation": "autonomous",
             }
             state.rejected_tweets.append(entry)
-            # Keep only last 50 entries
-            if len(state.rejected_tweets) > 50:
-                state.rejected_tweets = state.rejected_tweets[-50:]
+            # Keep only last entries
+            if len(state.rejected_tweets) > QueueLimits.REJECTED_TWEETS:
+                state.rejected_tweets = state.rejected_tweets[
+                    -QueueLimits.REJECTED_TWEETS :
+                ]
             await save_state(state)
             # Give I/O time to complete before raising exception
             await asyncio.sleep(0.1)
@@ -158,49 +214,49 @@ async def _post_autonomous_tweet_async(
 
     logger.info("tweet_validated", extra={"length": len(tweet_text)})
 
-    # Initialize browser driver
-    logger.info("initializing_browser")
-    driver = None
+    # Use session manager for browser operations
     try:
-        driver = create_driver(config)
+        async with AsyncTwitterSession(
+            config, twitter_username, twitter_password
+        ) as driver:
+            # Post tweet
+            logger.info("posting_tweet")
+            post_success = post_tweet(driver, tweet_text, config)
+            if not post_success:
+                logger.error("tweet_post_failed")
+                raise RuntimeError("Tweet posting failed")
 
-        # Try to load cookies first
-        cookies_loaded = load_cookies(driver, config)
-        if not cookies_loaded:
-            # Login if cookies not available
-            logger.info("logging_in")
-            login_success = login(driver, twitter_username, twitter_password, config)
-            if not login_success:
-                logger.error("login_failed")
-                raise RuntimeError("Login failed")
+            # Log written tweet for dashboard
+            await log_written_tweet(
+                text=tweet_text,
+                tweet_type="autonomous",
+            )
 
-            # Save cookies after successful login
-            save_cookies(driver)
+            # Store tweet in ChromaDB for future duplicate detection
+            if chroma_memory:
+                try:
+                    await chroma_memory.store_tweet(
+                        text=tweet_text,
+                        metadata={"type": "autonomous"},
+                    )
+                    logger.info("tweet_stored_in_memory")
+                except Exception as e:
+                    logger.warning(
+                        "failed_to_store_tweet_in_memory",
+                        extra={"error": str(e)},
+                    )
 
-        # Post tweet
-        logger.info("posting_tweet")
-        post_success = post_tweet(driver, tweet_text, config)
-        if not post_success:
-            logger.error("tweet_post_failed")
-            raise RuntimeError("Tweet posting failed")
+            # Update state
+            state.counters["posts_today"] += 1
+            state.last_post_time = datetime.now(timezone.utc)
 
-        # Log written tweet for dashboard
-        await log_written_tweet(
-            text=tweet_text,
-            tweet_type="autonomous",
-        )
+            # Save state
+            await save_state(state)
+            logger.info(
+                "state_updated", extra={"posts_today": state.counters["posts_today"]}
+            )
 
-        # Update state
-        state.counters["posts_today"] += 1
-        state.last_post_time = datetime.now(timezone.utc)
-
-        # Save state
-        await save_state(state)
-        logger.info(
-            "state_updated", extra={"posts_today": state.counters["posts_today"]}
-        )
-
-        logger.info("bot_completed_successfully")
+            logger.info("bot_completed_successfully")
 
     except Exception as e:
         logger.error("bot_error", extra={"error": str(e)}, exc_info=True)
@@ -209,12 +265,9 @@ async def _post_autonomous_tweet_async(
     finally:
         # Close LLM client to prevent event loop errors
         await llm_client.close()
-        if driver:
-            driver.quit()
-            logger.info("browser_closed")
 
 
-def read_frontpage_posts(config: BotConfig, env_settings: dict[str, Any]) -> None:
+def read_frontpage_posts(config: BotConfig, env_settings: EnvSettings) -> None:
     """Read frontpage posts (scheduled job).
 
     This function wraps async operations for APScheduler compatibility.
@@ -244,7 +297,7 @@ def read_frontpage_posts(config: BotConfig, env_settings: dict[str, Any]) -> Non
 
 
 async def _read_frontpage_posts_async(
-    config: BotConfig, env_settings: dict[str, Any]
+    config: BotConfig, env_settings: EnvSettings
 ) -> None:
     """Async implementation of frontpage post reading with interest detection.
 
@@ -257,6 +310,8 @@ async def _read_frontpage_posts_async(
     twitter_password = env_settings.get("TWITTER_PASSWORD")
     openai_api_key = env_settings.get("OPENAI_API_KEY")
     openrouter_api_key = env_settings.get("OPENROUTER_API_KEY")
+    google_api_key = env_settings.get("GOOGLE_API_KEY")
+    anthropic_api_key = env_settings.get("ANTHROPIC_API_KEY")
 
     if not twitter_username:
         raise ValueError("TWITTER_USERNAME environment variable is required")
@@ -264,7 +319,10 @@ async def _read_frontpage_posts_async(
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
     # Validate that at least one LLM provider is configured
-    if not openai_api_key and not openrouter_api_key:
+    has_llm_provider = any(
+        [openai_api_key, openrouter_api_key, google_api_key, anthropic_api_key]
+    )
+    if not has_llm_provider:
         logger.warning(
             "no_llm_provider_configured",
             extra={"detail": "Interest detection will be skipped"},
@@ -272,56 +330,44 @@ async def _read_frontpage_posts_async(
 
     # Initialize LLM client for interest detection
     llm_client = None
-    if openai_api_key or openrouter_api_key:
+    if has_llm_provider:
         llm_client = LLMClient(
             config=config,
             openai_api_key=openai_api_key,
             openrouter_api_key=openrouter_api_key,
+            google_api_key=google_api_key,
+            anthropic_api_key=anthropic_api_key,
         )
 
-    # Initialize browser driver
-    logger.info("initializing_browser")
-    driver = None
+    # Use session manager for browser operations
     try:
-        driver = create_driver(config)
+        async with AsyncTwitterSession(
+            config, twitter_username, twitter_password
+        ) as driver:
+            # Read posts
+            logger.info("reading_frontpage_posts")
+            posts = read_posts_from_frontpage(driver, config, count=10)
 
-        # Try to load cookies first
-        cookies_loaded = load_cookies(driver, config)
-        if not cookies_loaded:
-            # Login if cookies not available
-            logger.info("logging_in")
-            login_success = login(driver, twitter_username, twitter_password, config)
-            if not login_success:
-                logger.error("login_failed")
-                raise RuntimeError("Login failed")
+            logger.info(
+                "posts_read",
+                extra={
+                    "count": len(posts),
+                    "posts": [
+                        {
+                            "post_id": post.post_id,
+                            "username": post.username,
+                            "display_name": post.display_name,
+                            "text_length": len(post.text),
+                            "likes": post.likes,
+                            "retweets": post.retweets,
+                            "replies": post.replies,
+                        }
+                        for post in posts
+                    ],
+                },
+            )
 
-            # Save cookies after successful login
-            save_cookies(driver)
-
-        # Read posts
-        logger.info("reading_frontpage_posts")
-        posts = read_posts_from_frontpage(driver, config, count=10)
-
-        logger.info(
-            "posts_read",
-            extra={
-                "count": len(posts),
-                "posts": [
-                    {
-                        "post_id": post.post_id,
-                        "username": post.username,
-                        "display_name": post.display_name,
-                        "text_length": len(post.text),
-                        "likes": post.likes,
-                        "retweets": post.retweets,
-                        "replies": post.replies,
-                    }
-                    for post in posts
-                ],
-            },
-        )
-
-        # Evaluate posts for interest if LLM client is available
+        # Evaluate posts for interest if LLM client is available (outside browser session)
         interesting_posts = []
         if llm_client and posts:
             # Load state to check for already-queued posts
@@ -414,20 +460,19 @@ async def _read_frontpage_posts_async(
                         },
                     )
 
-                # Append to queue with size limit (max 50 posts)
-                max_queue_size = 50
+                # Append to queue with size limit
                 state.interesting_posts_queue.extend(post_dicts)
 
                 # Trim queue if it exceeds max size (keep most recent)
-                if len(state.interesting_posts_queue) > max_queue_size:
+                if len(state.interesting_posts_queue) > QueueLimits.INTERESTING_POSTS:
                     state.interesting_posts_queue = state.interesting_posts_queue[
-                        -max_queue_size:
+                        -QueueLimits.INTERESTING_POSTS :
                     ]
                     logger.info(
                         "queue_trimmed",
                         extra={
-                            "max_size": max_queue_size,
-                            "trimmed_to": max_queue_size,
+                            "max_size": QueueLimits.INTERESTING_POSTS,
+                            "trimmed_to": QueueLimits.INTERESTING_POSTS,
                         },
                     )
 
@@ -460,12 +505,9 @@ async def _read_frontpage_posts_async(
         # Close LLM client to prevent event loop errors
         if llm_client:
             await llm_client.close()
-        if driver:
-            driver.quit()
-            logger.info("browser_closed")
 
 
-def check_notifications(config: BotConfig, env_settings: dict[str, Any]) -> None:
+def check_notifications(config: BotConfig, env_settings: EnvSettings) -> None:
     """Check notifications (scheduled job).
 
     This function wraps async operations for APScheduler compatibility.
@@ -495,7 +537,7 @@ def check_notifications(config: BotConfig, env_settings: dict[str, Any]) -> None
 
 
 async def _check_notifications_async(
-    config: BotConfig, env_settings: dict[str, Any]
+    config: BotConfig, env_settings: EnvSettings
 ) -> None:
     """Async implementation of notification checking.
 
@@ -516,50 +558,34 @@ async def _check_notifications_async(
     state = await load_state()
     processed_ids = set(state.processed_notification_ids)
 
-    # Initialize browser driver
-    logger.info("initializing_browser_for_notifications")
-    driver = None
+    # Use session manager for browser operations
     try:
-        driver = create_driver(config)
+        async with AsyncTwitterSession(
+            config, twitter_username, twitter_password
+        ) as driver:
+            # Check notifications
+            logger.info("checking_notifications")
+            notifications = check_notifications_func(driver, config, count=20)
 
-        # Try to load cookies first
-        cookies_loaded = load_cookies(driver, config)
-        if not cookies_loaded:
-            # Login if cookies not available
-            logger.info("logging_in_for_notifications")
-            login_success = login(driver, twitter_username, twitter_password, config)
-            if not login_success:
-                logger.error("login_failed_for_notifications")
-                raise RuntimeError("Login failed for notification checking")
+            logger.info(
+                "notifications_checked",
+                extra={
+                    "count": len(notifications),
+                    "notifications": [
+                        {
+                            "notification_id": notif.notification_id,
+                            "type": notif.type,
+                            "from_username": notif.from_username,
+                            "text_length": len(notif.text),
+                            "is_reply": notif.is_reply,
+                            "is_mention": notif.is_mention,
+                        }
+                        for notif in notifications
+                    ],
+                },
+            )
 
-            # Save cookies after successful login
-            save_cookies(driver)
-
-        # Check notifications
-        logger.info("checking_notifications")
-        from src.x.notifications import check_notifications as check_notifications_func
-
-        notifications = check_notifications_func(driver, config, count=20)
-
-        logger.info(
-            "notifications_checked",
-            extra={
-                "count": len(notifications),
-                "notifications": [
-                    {
-                        "notification_id": notif.notification_id,
-                        "type": notif.type,
-                        "from_username": notif.from_username,
-                        "text_length": len(notif.text),
-                        "is_reply": notif.is_reply,
-                        "is_mention": notif.is_mention,
-                    }
-                    for notif in notifications
-                ],
-            },
-        )
-
-        # Filter out already processed notifications
+        # Filter out already processed notifications (outside browser session)
         new_notifications = [
             n for n in notifications if n.notification_id not in processed_ids
         ]
@@ -578,29 +604,33 @@ async def _check_notifications_async(
             # Convert notifications to dict for storage
             notification_dicts = [n.model_dump() for n in new_notifications]
 
-            # Append to queue with size limit (max 50 notifications)
-            max_queue_size = 50
+            # Append to queue with size limit
             state.notifications_queue.extend(notification_dicts)
 
             # Trim queue if it exceeds max size (keep most recent)
-            if len(state.notifications_queue) > max_queue_size:
-                state.notifications_queue = state.notifications_queue[-max_queue_size:]
+            if len(state.notifications_queue) > QueueLimits.NOTIFICATIONS:
+                state.notifications_queue = state.notifications_queue[
+                    -QueueLimits.NOTIFICATIONS :
+                ]
                 logger.info(
                     "notifications_queue_trimmed",
                     extra={
-                        "max_size": max_queue_size,
-                        "trimmed_to": max_queue_size,
+                        "max_size": QueueLimits.NOTIFICATIONS,
+                        "trimmed_to": QueueLimits.NOTIFICATIONS,
                     },
                 )
 
-            # Update processed notification IDs (keep last 100)
+            # Update processed notification IDs (keep recent ones)
             new_ids = [
                 n.notification_id for n in new_notifications if n.notification_id
             ]
             state.processed_notification_ids.extend(new_ids)
-            if len(state.processed_notification_ids) > 100:
+            if (
+                len(state.processed_notification_ids)
+                > QueueLimits.PROCESSED_NOTIFICATION_IDS
+            ):
                 state.processed_notification_ids = state.processed_notification_ids[
-                    -100:
+                    -QueueLimits.PROCESSED_NOTIFICATION_IDS :
                 ]
 
             # Update last check time
@@ -630,13 +660,8 @@ async def _check_notifications_async(
         )
         raise
 
-    finally:
-        if driver:
-            driver.quit()
-            logger.info("browser_closed")
 
-
-def process_inspiration_queue(config: BotConfig, env_settings: dict[str, Any]) -> None:
+def process_inspiration_queue(config: BotConfig, env_settings: EnvSettings) -> None:
     """Process inspiration queue (scheduled job).
 
     This function wraps async operations for APScheduler compatibility.
@@ -666,7 +691,7 @@ def process_inspiration_queue(config: BotConfig, env_settings: dict[str, Any]) -
 
 
 async def _process_inspiration_queue_async(
-    config: BotConfig, env_settings: dict[str, Any]
+    config: BotConfig, env_settings: EnvSettings
 ) -> None:
     """Async implementation of inspiration queue processing.
 
@@ -674,8 +699,10 @@ async def _process_inspiration_queue_async(
         config: Bot configuration
         env_settings: Dictionary with environment variables
     """
-    # Load state
-    state = await load_state()
+    # Load state (with automatic counter reset check)
+    state = await load_state(
+        reset_time_utc=config.rate_limits.reset_time_utc,
+    )
 
     # Check rate limits before processing
     if state.counters["posts_today"] >= config.rate_limits.max_posts_per_day:
@@ -713,11 +740,16 @@ async def _process_inspiration_queue_async(
     # Get environment variables
     openai_api_key = env_settings.get("OPENAI_API_KEY")
     openrouter_api_key = env_settings.get("OPENROUTER_API_KEY")
+    google_api_key = env_settings.get("GOOGLE_API_KEY")
+    anthropic_api_key = env_settings.get("ANTHROPIC_API_KEY")
     twitter_username = env_settings.get("TWITTER_USERNAME")
     twitter_password = env_settings.get("TWITTER_PASSWORD")
 
     # Validate that at least one LLM provider is configured
-    if not openai_api_key and not openrouter_api_key:
+    has_llm_provider = any(
+        [openai_api_key, openrouter_api_key, google_api_key, anthropic_api_key]
+    )
+    if not has_llm_provider:
         logger.warning(
             "no_llm_provider_configured",
             extra={"detail": "Inspiration queue processing will be skipped"},
@@ -734,14 +766,28 @@ async def _process_inspiration_queue_async(
         config=config,
         openai_api_key=openai_api_key,
         openrouter_api_key=openrouter_api_key,
+        google_api_key=google_api_key,
+        anthropic_api_key=anthropic_api_key,
     )
 
     # Take the first batch of posts
     # We need to convert dicts back to Post objects for the LLM client
-    from src.state.models import Post
-
     posts_batch_dicts = state.interesting_posts_queue[:threshold]
     posts_batch = [Post(**p) for p in posts_batch_dicts]
+
+    # Initialize ChromaDB for duplicate detection if available
+    chroma_memory = None
+    if CHROMA_AVAILABLE and openai_api_key and ChromaMemory is not None:
+        try:
+            chroma_memory = ChromaMemory(
+                config=config,
+                openai_api_key=openai_api_key,
+            )
+        except Exception as e:
+            logger.warning(
+                "chroma_init_failed",
+                extra={"error": str(e)},
+            )
 
     # Generate inspired tweet with retry on validation failure
     max_attempts = 3
@@ -758,6 +804,27 @@ async def _process_inspiration_queue_async(
                     "length": len(tweet_text),
                 },
             )
+
+            # Check for duplicate using ChromaDB
+            if chroma_memory:
+                try:
+                    is_duplicate, similarity = await chroma_memory.check_duplicate(
+                        tweet_text
+                    )
+                    if is_duplicate:
+                        logger.warning(
+                            "inspiration_duplicate_detected",
+                            extra={
+                                "similarity": similarity,
+                                "attempt": attempt,
+                            },
+                        )
+                        continue  # Try again with new generation
+                except Exception as e:
+                    logger.warning(
+                        "chroma_duplicate_check_failed",
+                        extra={"error": str(e)},
+                    )
 
             # Validate tweet
             is_valid, error_message = await llm_client.validate_tweet(tweet_text)
@@ -793,8 +860,10 @@ async def _process_inspiration_queue_async(
                     }
                     state.rejected_tweets.append(entry)
                     # Keep only last 50 entries
-                    if len(state.rejected_tweets) > 50:
-                        state.rejected_tweets = state.rejected_tweets[-50:]
+                    if len(state.rejected_tweets) > QueueLimits.REJECTED_TWEETS:
+                        state.rejected_tweets = state.rejected_tweets[
+                            -QueueLimits.REJECTED_TWEETS :
+                        ]
                     await save_state(state)
                     # Give I/O time to complete before raising exception
                     await asyncio.sleep(0.1)
@@ -809,29 +878,10 @@ async def _process_inspiration_queue_async(
                     f"Inspiration tweet validation failed after {max_attempts} attempts: {error_message}"
                 )
 
-        # Initialize browser driver
-        logger.info("initializing_browser_for_inspiration")
-        driver = None
-        try:
-            driver = create_driver(config)
-
-            # Try to load cookies first
-            cookies_loaded = load_cookies(driver, config)
-            if not cookies_loaded:
-                # Login if cookies not available
-                logger.info("logging_in_for_inspiration")
-                login_success = login(
-                    driver, twitter_username, twitter_password, config
-                )
-                if not login_success:
-                    logger.error("login_failed_for_inspiration")
-                    raise RuntimeError("Login failed for inspiration queue processing")
-
-                # Save cookies after successful login
-                save_cookies(driver)
-
-            from src.x.posting import post_tweet
-
+        # Use session manager for browser operations
+        async with AsyncTwitterSession(
+            config, twitter_username, twitter_password
+        ) as driver:
             success = post_tweet(driver, tweet_text, config)
 
             if success:
@@ -842,6 +892,20 @@ async def _process_inspiration_queue_async(
                     text=tweet_text,
                     tweet_type="inspiration",
                 )
+
+                # Store tweet in ChromaDB for future duplicate detection
+                if chroma_memory:
+                    try:
+                        await chroma_memory.store_tweet(
+                            text=tweet_text,
+                            metadata={"type": "inspiration"},
+                        )
+                        logger.info("inspiration_tweet_stored_in_memory")
+                    except Exception as e:
+                        logger.warning(
+                            "failed_to_store_inspiration_tweet_in_memory",
+                            extra={"error": str(e)},
+                        )
 
                 # Update state: remove processed posts
                 # We reload state to avoid race conditions
@@ -861,11 +925,6 @@ async def _process_inspiration_queue_async(
                 await save_state(current_state)
             else:
                 logger.error("failed_to_post_inspiration_tweet")
-
-        finally:
-            if driver:
-                driver.quit()
-                logger.info("browser_closed")
 
     except Exception as e:
         logger.error(
