@@ -15,6 +15,13 @@
                     onclick="setActiveTab(this)">
                 Read
             </button>
+            <button class="tab {% if active_tab == 'interested' %}active{% endif %}"
+                    hx-get="/partials/posts/interested" 
+                    hx-target="#posts-content"
+                    hx-swap="innerHTML"
+                    onclick="setActiveTab(this)">
+                Interested
+            </button>
             <button class="tab {% if active_tab == 'written' %}active{% endif %}"
                     hx-get="/partials/posts/written" 
                     hx-target="#posts-content"

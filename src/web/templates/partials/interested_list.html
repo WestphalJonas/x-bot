@@ -1,0 +1,40 @@
+<div class="posts-list-header">
+    <h3>Interested Posts</h3>
+    <span class="posts-count">{{ total }} in queue</span>
+</div>
+
+{% if posts %}
+<div class="posts-list">
+    {% for post in posts %}
+    <div class="post-card">
+        <div class="post-header">
+            <span class="post-author">
+                <span class="display-name">{{ post.metadata.get('display_name') or post.metadata.get('username') or 'Unknown' }}</span>
+                {% if post.metadata.get('username') %}
+                <span class="username">@{{ post.metadata.get('username').lstrip('@') }}</span>
+                {% endif %}
+            </span>
+            <span class="post-time" data-timestamp="{{ post.metadata.get('timestamp', '') }}" data-time-format="short"></span>
+        </div>
+        <div class="post-text">{{ post.text }}</div>
+        <div class="post-footer">
+            <span class="post-stats">
+                <span class="stat">❤️ {{ post.metadata.get('likes', 0) }}</span>
+                <span class="stat">🔁 {{ post.metadata.get('retweets', 0) }}</span>
+                <span class="stat">💬 {{ post.metadata.get('replies', 0) }}</span>
+            </span>
+            {% if post.metadata.get('url') %}
+            <a href="{{ post.metadata.get('url') }}" target="_blank" class="post-link">View on X →</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">⭐</div>
+    <p class="empty-title">No interesting posts</p>
+    <p class="empty-hint">Posts matching your interests will appear here.</p>
+</div>
+{% endif %}
+

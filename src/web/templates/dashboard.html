@@ -17,13 +17,13 @@
     <!-- Stats Cards - Activity -->
     <div class="stats-row">
         <div class="stats-category">
-            <div class="stat-card">
+            <a href="/posts?tab=written" class="stat-card stat-card-link">
                 <div class="stat-icon">📝</div>
                 <div class="stat-content">
                     <div class="stat-value">{{ state.counters.get('posts_today', 0) }}</div>
                     <div class="stat-label">Posts Today</div>
                 </div>
-            </div>
+            </a>
             
             <div class="stat-card">
                 <div class="stat-icon">💬</div>
@@ -35,15 +35,15 @@
         </div>
         
         <div class="stats-category">
-            <div class="stat-card">
+            <a href="/posts?tab=interested" class="stat-card stat-card-link">
                 <div class="stat-icon">⭐</div>
                 <div class="stat-content">
                     <div class="stat-value">{{ state.interesting_posts_queue | length }}</div>
                     <div class="stat-label">Interesting</div>
                 </div>
-            </div>
+            </a>
             
-            <div class="stat-card">
+            <div class="stat-card stat-card-disabled" title="Coming soon">
                 <div class="stat-icon">🔔</div>
                 <div class="stat-content">
                     <div class="stat-value">{{ state.notifications_queue | length }}</div>

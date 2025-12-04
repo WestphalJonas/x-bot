@@ -234,6 +234,49 @@ async def posts_rejected_partial(request: Request) -> HTMLResponse:
     )
 
 
+@router.get("/partials/posts/interested", response_class=HTMLResponse)
+async def posts_interested_partial(request: Request) -> HTMLResponse:
+    """Partial for interested posts list (HTMX)."""
+    templates = request.app.state.templates
+
+    posts = []
+    total = 0
+
+    try:
+        state = await load_state()
+        queue = state.interesting_posts_queue
+
+        total = len(queue)
+        for post_data in queue:
+            posts.append(
+                {
+                    "id": post_data.get("post_id", ""),
+                    "text": post_data.get("text", ""),
+                    "metadata": {
+                        "username": post_data.get("username"),
+                        "display_name": post_data.get("display_name"),
+                        "post_type": post_data.get("post_type"),
+                        "url": post_data.get("url"),
+                        "likes": post_data.get("likes", 0),
+                        "retweets": post_data.get("retweets", 0),
+                        "replies": post_data.get("replies", 0),
+                        "timestamp": to_iso_string(post_data.get("timestamp")),
+                    },
+                }
+            )
+    except Exception:
+        pass
+
+    return templates.TemplateResponse(
+        "partials/interested_list.html",
+        {
+            "request": request,
+            "posts": posts,
+            "total": total,
+        },
+    )
+
+
 @router.get("/partials/analytics/tokens", response_class=HTMLResponse)
 async def analytics_tokens_partial(request: Request) -> HTMLResponse:
     """Partial for token usage analytics (HTMX)."""

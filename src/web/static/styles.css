@@ -447,6 +447,26 @@ button {
     background: var(--bg-elevated);
 }
 
+.stat-card-link {
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.stat-card-link:hover {
+    border-color: var(--accent-blue);
+}
+
+.stat-card-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.stat-card-disabled:hover {
+    border-color: var(--border-color);
+    background: var(--bg-secondary);
+}
+
 .stat-icon {
     font-size: 20px;
     width: 36px;
@@ -898,6 +918,31 @@ button {
     color: var(--text-tertiary);
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.post-stats {
+    display: flex;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.post-stats .stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.post-link {
+    font-size: 13px;
+    color: var(--accent-blue);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.post-link:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
 }
 
 /* Badges */
