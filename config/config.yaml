@@ -6,8 +6,8 @@ rate_limits:
 selenium:
   min_delay_seconds: 1.0  # Reduced from 5.0 for faster debugging
   max_delay_seconds: 3.0  # Reduced from 15.0 for faster debugging
-  headless: false  # Keep visible for debugging
-  user_agent_rotation: true
+  headless: true  # Keep visible for debugging
+  user_agent_rotation: false
 
 llm:
   provider: "openrouter"
@@ -23,13 +23,13 @@ llm:
   use_fallback: true
 
 scheduler:
-  post_interval_hours: 0.1  # 6 minutes (reduced from 8.0 hours)
-  post_jitter_hours: 0.01  # ~36 seconds (reduced from 1.0 hour)
-  mention_check_minutes: 1  # 1 minute (reduced from 30 minutes)
-  reading_check_minutes: 1  # 1 minute (reduced from 30 minutes)
-  event_check_minutes: 1  # 1 minute (reduced from 15 minutes)
-  inspiration_check_minutes: 1 # 1 minute for testing
-  inspiration_batch_size: 5
+  post_interval_hours: 1  # 6 minutes (reduced from 8.0 hours)
+  post_jitter_hours: 1  # ~36 seconds (reduced from 1.0 hour)
+  mention_check_minutes: 30  # 1 minute (reduced from 30 minutes)
+  reading_check_minutes: 30  # 1 minute (reduced from 30 minutes)
+  event_check_minutes: 15  # 1 minute (reduced from 15 minutes)
+  inspiration_check_minutes: 60 # 1 minute for testing
+  inspiration_batch_size: 20
 
 personality:
   tone: "professional"
@@ -37,7 +37,13 @@ personality:
     - "AI"
     - "technology"
     - "crypto"
-  style: "concise"
+    - "blockchain"
+    - "web3"
+    - "defi"
+    - "nft"
+    - "metaverse"
+    - "gaming"
+  style: "cryptic"
   min_tweet_length: 60
   max_tweet_length: 280
 

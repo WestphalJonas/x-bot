@@ -136,7 +136,7 @@ class PersonalityConfig(BaseModel):
     topics: list[str] = Field(
         default_factory=lambda: ["AI", "technology"], description="Preferred topics"
     )
-    style: Literal["concise", "detailed", "conversational"] = Field(default="concise")
+    style: str = Field(default="concise", description="Writing style (e.g. concise, detailed, conversational, witty)")
     min_tweet_length: int = Field(default=180, ge=1, le=280)
     max_tweet_length: int = Field(default=400, ge=180, le=400)
 
