@@ -19,12 +19,17 @@ from src.scheduler.jobs import (
     process_inspiration_queue,
     read_frontpage_posts,
 )
+from src.monitoring.logging_config import setup_logging
 from src.state.manager import load_state, save_state
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+# Configure logging (before other imports that might log)
+setup_logging(
+    log_level=os.getenv("LOG_LEVEL", "INFO"),
+    log_dir="logs",
+    log_file="bot.log",
+    max_bytes=10 * 1024 * 1024,  # 10MB
+    backup_count=5,
+    console_output=True,  # Keep console output for development
 )
 logger = logging.getLogger(__name__)
 

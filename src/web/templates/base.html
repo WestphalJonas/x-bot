@@ -183,6 +183,81 @@
         })();
     </script>
     
+    <!-- Timezone conversion utility -->
+    <script>
+        // Format timestamps to local timezone
+        function formatLocalTime(isoString) {
+            if (!isoString) return '';
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                return isoString;
+            }
+        }
+
+        function formatLocalTimeShort(isoString) {
+            if (!isoString) return '';
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                return isoString;
+            }
+        }
+
+        function formatLocalTimeTimeOnly(isoString) {
+            if (!isoString) return '';
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                return isoString;
+            }
+        }
+
+        // Convert all elements with data-timestamp attribute
+        function convertTimestampsToLocal() {
+            document.querySelectorAll('[data-timestamp]').forEach(el => {
+                const isoString = el.getAttribute('data-timestamp');
+                if (isoString) {
+                    const format = el.getAttribute('data-time-format') || 'default';
+                    let formatted;
+                    if (format === 'short') {
+                        formatted = formatLocalTimeShort(isoString);
+                    } else if (format === 'time-only') {
+                        formatted = formatLocalTimeTimeOnly(isoString);
+                    } else {
+                        formatted = formatLocalTime(isoString);
+                    }
+                    el.textContent = formatted;
+                }
+            });
+        }
+
+        // Run on page load and after HTMX swaps
+        document.addEventListener('DOMContentLoaded', convertTimestampsToLocal);
+        document.body.addEventListener('htmx:afterSwap', convertTimestampsToLocal);
+    </script>
+    
     {% block scripts %}{% endblock %}
 </body>
 </html>

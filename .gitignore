@@ -6,3 +6,6 @@ config/cookie.json
 .venv/
 .pytest_cache/
 /tests
+logs/
+*.log
+*.log.*

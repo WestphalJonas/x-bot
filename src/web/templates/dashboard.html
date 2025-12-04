@@ -76,7 +76,7 @@
                         <span class="status-label">Running Since</span>
                         {% if state.bot_started_at %}
                         <span class="status-value" id="running-since" data-started="{{ state.bot_started_at.isoformat() }}">
-                            {{ state.bot_started_at.strftime('%b %d, %H:%M UTC') }}
+                            <span data-timestamp="{{ state.bot_started_at.isoformat() }}" data-time-format="short"></span>
                         </span>
                         <span class="status-subtext" id="uptime"></span>
                         {% else %}
@@ -91,7 +91,7 @@
                         <span class="status-label">Last Action</span>
                         {% if state.last_action %}
                         <span class="status-value">{{ state.last_action }}</span>
-                        <span class="status-subtext">{{ state.last_action_time.strftime('%H:%M:%S') if state.last_action_time else '' }}</span>
+                        <span class="status-subtext" data-timestamp="{{ state.last_action_time.isoformat() if state.last_action_time else '' }}" data-time-format="time-only"></span>
                         {% else %}
                         <span class="status-value">No actions yet</span>
                         {% endif %}
@@ -202,7 +202,7 @@
                 <div class="activity-item">
                     <span class="activity-icon">📝</span>
                     <span class="activity-text">Last post</span>
-                    <span class="activity-time">{{ state.last_post_time }}</span>
+                    <span class="activity-time" data-timestamp="{{ state.last_post_time.isoformat() if state.last_post_time else '' }}" data-time-format="short"></span>
                 </div>
                 {% endif %}
                 
@@ -210,7 +210,7 @@
                 <div class="activity-item">
                     <span class="activity-icon">🔔</span>
                     <span class="activity-text">Notification check</span>
-                    <span class="activity-time">{{ state.last_notification_check_time }}</span>
+                    <span class="activity-time" data-timestamp="{{ state.last_notification_check_time.isoformat() if state.last_notification_check_time else '' }}" data-time-format="short"></span>
                 </div>
                 {% endif %}
                 

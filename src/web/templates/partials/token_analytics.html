@@ -88,7 +88,7 @@
             <tbody>
                 {% for entry in entries %}
                 <tr>
-                    <td class="time-cell">{{ entry.timestamp[:16].replace('T', ' ') if entry.timestamp else '-' }}</td>
+                    <td class="time-cell" data-timestamp="{{ entry.timestamp }}" data-time-format="short"></td>
                     <td><span class="provider-badge provider-{{ entry.provider }}">{{ entry.provider }}</span></td>
                     <td class="model-cell">{{ entry.model }}</td>
                     <td>{{ entry.operation | replace('_', ' ') }}</td>

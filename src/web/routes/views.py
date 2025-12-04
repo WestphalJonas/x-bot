@@ -1,5 +1,6 @@
 """HTML view routes for the X bot dashboard."""
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
@@ -14,6 +15,29 @@ if TYPE_CHECKING:
     from src.memory.chroma_client import ChromaMemory
 
 router = APIRouter()
+
+
+def to_iso_string(timestamp: datetime | str | None) -> str:
+    """Convert datetime object or string to ISO format string.
+    
+    Args:
+        timestamp: datetime object, ISO string, or None
+        
+    Returns:
+        ISO format string or empty string if None
+    """
+    if timestamp is None:
+        return ""
+    if isinstance(timestamp, datetime):
+        return timestamp.isoformat()
+    if isinstance(timestamp, str):
+        # If already a string, try to parse and return ISO format
+        try:
+            dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            return dt.isoformat()
+        except (ValueError, AttributeError):
+            return timestamp
+    return str(timestamp)
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -121,8 +145,8 @@ async def posts_read_partial(request: Request) -> HTMLResponse:
                         "post_type": post.get("post_type"),
                         "url": post.get("url"),
                         "is_interesting": post.get("is_interesting"),
-                        "timestamp": post.get("read_at"),
-                        "post_timestamp": post.get("post_timestamp"),
+                        "timestamp": to_iso_string(post.get("read_at")),
+                        "post_timestamp": to_iso_string(post.get("post_timestamp")),
                     },
                 }
             )
@@ -157,7 +181,7 @@ async def posts_written_partial(request: Request) -> HTMLResponse:
             tweets.append(
                 {
                     "text": tweet.get("text", ""),
-                    "timestamp": tweet.get("created_at"),
+                    "timestamp": to_iso_string(tweet.get("created_at")),
                     "tweet_type": tweet.get("tweet_type", "autonomous"),
                 }
             )
@@ -193,7 +217,7 @@ async def posts_rejected_partial(request: Request) -> HTMLResponse:
                 {
                     "text": tweet.get("text", ""),
                     "reason": tweet.get("reason", "Unknown"),
-                    "timestamp": tweet.get("rejected_at"),
+                    "timestamp": to_iso_string(tweet.get("rejected_at")),
                     "operation": tweet.get("operation", "unknown"),
                 }
             )
@@ -234,7 +258,7 @@ async def analytics_tokens_partial(request: Request) -> HTMLResponse:
         for entry in entries_data:
             entries.append(
                 {
-                    "timestamp": entry.get("timestamp"),
+                    "timestamp": to_iso_string(entry.get("timestamp")),
                     "provider": entry.get("provider", "unknown"),
                     "model": entry.get("model", "unknown"),
                     "prompt_tokens": entry.get("prompt_tokens", 0),

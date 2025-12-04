@@ -166,7 +166,9 @@ async def get_written_tweets(
         return WrittenTweetsListResponse(tweets=tweets, total=total)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching written tweets: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching written tweets: {e}"
+        )
 
 
 @router.get("/posts/rejected", response_model=RejectedTweetsListResponse)
@@ -197,7 +199,9 @@ async def get_rejected_tweets(limit: int = 50) -> RejectedTweetsListResponse:
         return RejectedTweetsListResponse(tweets=tweets, total=total)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching rejected tweets: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching rejected tweets: {e}"
+        )
 
 
 @router.get("/analytics/tokens", response_model=TokenAnalyticsResponse)
@@ -237,7 +241,9 @@ async def get_token_analytics(limit: int = 100) -> TokenAnalyticsResponse:
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching token analytics: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching token analytics: {e}"
+        )
 
 
 @router.get("/state", response_model=StateResponse)
@@ -296,4 +302,3 @@ async def get_job_queue_status() -> JobQueueResponse:
         pending_jobs=pending_jobs,
         is_empty=job_queue.is_empty(),
     )
-

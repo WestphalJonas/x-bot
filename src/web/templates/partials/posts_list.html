@@ -14,7 +14,7 @@
                 <span class="username">@{{ post.metadata.get('username').lstrip('@') }}</span>
                 {% endif %}
             </span>
-            <span class="post-time">{{ post.metadata.get('timestamp', '')[:16].replace('T', ' ') if post.metadata.get('timestamp') else '' }}</span>
+            <span class="post-time" data-timestamp="{{ post.metadata.get('timestamp', '') }}" data-time-format="short"></span>
         </div>
         <div class="post-text">{{ post.text }}</div>
         <div class="post-footer">

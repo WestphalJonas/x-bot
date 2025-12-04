@@ -9,7 +9,7 @@
     <div class="post-card rejected-card">
         <div class="post-header">
             <span class="tweet-type badge-rejected">{{ tweet.operation | capitalize }}</span>
-            <span class="post-time">{{ tweet.timestamp[:16].replace('T', ' ') if tweet.timestamp else '' }}</span>
+            <span class="post-time" data-timestamp="{{ tweet.timestamp }}" data-time-format="short"></span>
         </div>
         <div class="post-text">{{ tweet.text }}</div>
         <div class="rejection-reason">
