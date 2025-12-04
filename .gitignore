@@ -5,3 +5,4 @@ config/cookie.json
 *.png
 .venv/
 .pytest_cache/
+/tests
