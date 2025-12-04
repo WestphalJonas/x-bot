@@ -6,6 +6,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 from src.core.config import BotConfig
 from src.core.llm import LLMClient, is_rate_limit_but_not_quota
+from src.core.prompts import INTEREST_CHECK_PROMPT
 from src.state.models import Post
 from src.web.data_tracker import log_token_usage
 
@@ -40,27 +41,16 @@ async def check_interest(post: Post, config: BotConfig, llm_client: LLMClient) -
     style = config.personality.style
     topics = ", ".join(config.personality.topics)
 
-    # Build evaluation prompt
-    prompt = f"""Evaluate if this Twitter/X post matches the bot's interests and personality:
-
-Bot Personality:
-- Tone: {tone}
-- Style: {style}
-- Topics: {topics}
-
-Post:
-- Author: {post.username} ({post.display_name or "N/A"})
-- Content: "{post.text}"
-- Engagement: {post.likes} likes, {post.retweets} retweets, {post.replies} replies
-- Post Type: {post.post_type}
-
-Does this post align with the bot's interests and personality?
-Consider:
-- Does the content relate to the bot's topics of interest?
-- Does the tone/style match what the bot would engage with?
-- Is this something the bot would find valuable or interesting?
-
-Respond with only "YES" if it matches, or "NO" if it doesn't."""
+    # Build evaluation prompt using template
+    prompt = INTEREST_CHECK_PROMPT.format(
+        tone=tone,
+        style=style,
+        topics=topics,
+        username=post.username or "unknown",
+        text=post.text,
+        likes=post.likes or 0,
+        retweets=post.retweets or 0,
+    )
 
     # Get LLM client (use primary provider)
     client = llm_client._get_client(llm_client.config.llm.provider)

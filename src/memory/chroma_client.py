@@ -7,13 +7,24 @@ from pathlib import Path
 
 import chromadb
 from chromadb.config import Settings
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 from pydantic import BaseModel, Field
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_not_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from src.core.config import BotConfig
 
 logger = logging.getLogger(__name__)
+
+
+class EmbeddingRateLimitError(Exception):
+    """Raised when rate limited on embedding API - should not be retried."""
+
+    pass
 
 
 class EmbeddingResult(BaseModel):
@@ -45,7 +56,8 @@ class ChromaMemory:
         self.similarity_threshold = config.llm.similarity_threshold
         
         # OpenAI client for embeddings
-        self.openai_client = AsyncOpenAI(api_key=openai_api_key)
+        # Disable built-in retries - we handle retries ourselves with tenacity
+        self.openai_client = AsyncOpenAI(api_key=openai_api_key, max_retries=0)
         
         # Ensure persist directory exists
         Path(persist_directory).mkdir(parents=True, exist_ok=True)
@@ -70,6 +82,7 @@ class ChromaMemory:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_not_exception_type(EmbeddingRateLimitError),
         reraise=True,
     )
     async def _get_embedding_from_api(self, text: str) -> list[float]:
@@ -80,11 +93,27 @@ class ChromaMemory:
 
         Returns:
             Embedding vector
+
+        Raises:
+            EmbeddingRateLimitError: When rate limited (should not be retried)
         """
-        response = await self.openai_client.embeddings.create(
-            model=self.embedding_model,
-            input=text,
-        )
+        try:
+            response = await self.openai_client.embeddings.create(
+                model=self.embedding_model,
+                input=text,
+            )
+        except RateLimitError as e:
+            # Don't retry on rate limit - raise custom exception to stop retries
+            logger.warning(
+                "embedding_rate_limited",
+                extra={
+                    "model": self.embedding_model,
+                    "error": str(e),
+                },
+            )
+            raise EmbeddingRateLimitError(
+                f"OpenAI embedding API rate limited: {e}"
+            ) from e
         
         logger.info(
             "embedding_api_call",

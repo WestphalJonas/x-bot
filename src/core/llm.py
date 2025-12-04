@@ -200,6 +200,12 @@ class LLMClient:
 
         last_error = None
 
+        # Format the generation prompt with character length requirements
+        user_prompt = TWEET_GENERATION_PROMPT.format(
+            min_tweet_length=self.config.personality.min_tweet_length,
+            max_tweet_length=self.config.personality.max_tweet_length,
+        )
+
         for provider in providers:
             if not self._has_provider(provider):
                 logger.warning(
@@ -215,18 +221,18 @@ class LLMClient:
                 # Handle Google and Anthropic separately
                 if provider == "google":
                     tweet = await self._generate_with_google(
-                        system_prompt, TWEET_GENERATION_PROMPT, "generate"
+                        system_prompt, user_prompt, "generate"
                     )
                 elif provider == "anthropic":
                     tweet = await self._generate_with_anthropic(
-                        system_prompt, TWEET_GENERATION_PROMPT, "generate"
+                        system_prompt, user_prompt, "generate"
                     )
                 else:
                     # OpenAI-compatible providers
                     client = self._get_client(provider)
                     if client:
                         tweet = await self._generate_with_provider(
-                            client, provider, system_prompt, operation="generate"
+                            client, provider, system_prompt, user_prompt, operation="generate"
                         )
                     else:
                         continue
@@ -293,6 +299,7 @@ class LLMClient:
             tone=tone,
             style=style,
             topics=topics,
+            min_tweet_length=self.config.personality.min_tweet_length,
             max_tweet_length=self.config.personality.max_tweet_length,
         )
 
@@ -381,14 +388,17 @@ class LLMClient:
             client: AsyncOpenAI client instance
             provider: Provider name for logging
             system_prompt: System prompt with personality and guidelines
-            user_prompt: Optional user prompt (defaults to TWEET_GENERATION_PROMPT)
+            user_prompt: Optional user prompt (defaults to formatted TWEET_GENERATION_PROMPT)
             operation: Operation type for tracking (generate, inspiration, etc.)
 
         Returns:
             Generated tweet text
         """
         if user_prompt is None:
-            user_prompt = TWEET_GENERATION_PROMPT
+            user_prompt = TWEET_GENERATION_PROMPT.format(
+                min_tweet_length=self.config.personality.min_tweet_length,
+                max_tweet_length=self.config.personality.max_tweet_length,
+            )
 
         # For OpenRouter, we might need to adjust the model name
         model = self.model

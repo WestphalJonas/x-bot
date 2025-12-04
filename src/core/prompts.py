@@ -7,39 +7,99 @@ Personality:
 - Style: {style}
 - Topics: {topics}
 
-Content Guidelines:
-- Tweet length: {min_tweet_length}-{max_tweet_length} characters
-- Create original, engaging content
-- Stay within Twitter/X terms of service
-- Do NOT use hashtags"""
+Rules:
+- Tweet length: {min_tweet_length}-{max_tweet_length} characters (strict)
+- No hashtags ever
+- No generic AI phrases like "exciting", "game-changer", "the future of"
+- Be specific and concrete, not vague"""
 
-TWEET_GENERATION_PROMPT = "Generate a single, engaging tweet that follows all the guidelines above. Return only the tweet text, nothing else."
+TWEET_GENERATION_PROMPT = """Generate ONE tweet.
 
-BRAND_CHECK_PROMPT = """Check if this tweet aligns with the brand personality:
+Requirements:
+- Be specific and concrete, not abstract or vague
+- Share an insight, opinion, observation, or useful information
+- Sound like a real person with expertise, not a marketing account
+- Natural language that reads well
 
-Brand Personality:
+Avoid these patterns:
+- Starting with "I" or "Just"
+- Phrases: "excited to", "game-changer", "the future of", "it's fascinating", "in today's world"
+- Questions fishing for engagement ("What do you think?", "Anyone else?")
+- Hashtags or excessive emojis
+- Vague statements that could apply to anything
+
+Length: {min_tweet_length}-{max_tweet_length} characters
+
+Return ONLY the tweet text, no quotes, no explanation."""
+
+BRAND_CHECK_PROMPT = """Evaluate this tweet against the brand criteria:
+
+Brand:
 - Tone: {tone}
 - Style: {style}
 - Topics: {topics}
 
 Tweet: "{tweet}"
 
-Respond with only "YES" if the tweet aligns with the brand personality, or "NO" if it doesn't."""
+Check these criteria:
+1. TOPIC: Does it relate to the brand's topics ({topics})?
+2. TONE: Does it match the {tone} tone?
+3. STYLE: Is it {style} as required?
+4. QUALITY: Is it specific (not generic/vague)?
+5. RULES: No hashtags, no banned phrases?
 
-INSPIRATION_TWEET_PROMPT = """Here are some posts I found interesting:
+If ALL criteria pass, respond "YES".
+If ANY criterion fails, respond "NO".
+
+Respond with only YES or NO."""
+
+INSPIRATION_TWEET_PROMPT = """Here are posts I found interesting:
 
 {posts_context}
 
-Based on these posts, generate a single, original tweet that is inspired by their themes, thoughts, or ideas.
-Do NOT summarize the posts. Do NOT reply to them directly.
-Create a NEW thought or observation that fits my personality.
+Your task: Create ONE original tweet inspired by themes or ideas from these posts.
 
-Personality:
+How to approach this:
+1. Identify a common thread, tension, or interesting angle across the posts
+2. Form your OWN take or observation related to that theme
+3. Make it feel like an original thought, not a response or summary
+
+Do NOT:
+- Summarize or paraphrase the posts
+- Reply to or quote them
+- Use generic reactions ("Great point!", "This is so true")
+- Reference the posts directly ("Seeing a lot of discussion about...")
+
+Your voice:
 - Tone: {tone}
 - Style: {style}
 - Topics: {topics}
 
-Do NOT use hashtags.
-IMPORTANT: Keep your tweet under {max_tweet_length} characters!
+Length: {min_tweet_length}-{max_tweet_length} characters (strict limit)
+No hashtags.
 
-Return only the tweet text, nothing else."""
+Return ONLY the tweet text."""
+
+INTEREST_CHECK_PROMPT = """Evaluate if this post matches the bot's interests.
+
+Bot Profile:
+- Tone: {tone}
+- Style: {style}
+- Topics: {topics}
+
+Post to evaluate:
+- Author: @{username}
+- Content: "{text}"
+- Engagement: {likes} likes, {retweets} retweets
+
+Evaluation criteria (in order of importance):
+1. TOPIC MATCH: Does the content relate to [{topics}]? (Most important)
+2. QUALITY: Is this substantive content vs. noise/spam/memes?
+3. ENGAGEMENT POTENTIAL: Would responding or being inspired by this add value?
+
+Score:
+- If topic matches AND quality is decent → YES
+- If topic doesn't match → NO (regardless of quality)
+- If spam/low-effort/meme → NO
+
+Respond with only YES or NO."""
