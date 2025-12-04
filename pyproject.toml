@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiofiles>=24.1.0",
+    "aiosqlite>=0.19.0",
     "apscheduler>=3.11.1",
     "openai>=2.7.0",
     "pydantic>=2.0.0",

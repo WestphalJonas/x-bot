@@ -2,6 +2,7 @@
 
 import logging
 import threading
+from collections import deque
 from typing import Callable
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -18,6 +19,82 @@ _job_lock = threading.Lock()
 def get_job_lock() -> threading.Lock:
     """Get the global job lock."""
     return _job_lock
+
+
+class JobQueue:
+    """Thread-safe job queue with deduplication.
+
+    When a job can't run immediately (because another job is running),
+    it gets added to this queue. After each job completes, the queue
+    is processed to run any pending jobs.
+
+    Jobs are deduplicated by job_id - only one pending execution per job type.
+    """
+
+    def __init__(self):
+        """Initialize the job queue."""
+        self._queue: deque[tuple[str, Callable]] = deque()
+        self._pending_job_ids: set[str] = set()
+        self._lock = threading.Lock()
+
+    def add_job(self, job_id: str, func: Callable) -> bool:
+        """Add a job to the queue if not already pending.
+
+        Args:
+            job_id: Unique identifier for the job type
+            func: Callable to execute (already wrapped with config/env)
+
+        Returns:
+            True if job was added, False if already pending
+        """
+        with self._lock:
+            if job_id in self._pending_job_ids:
+                logger.info(
+                    "job_already_queued",
+                    extra={"job_id": job_id, "queue_size": len(self._queue)},
+                )
+                return False
+
+            self._queue.append((job_id, func))
+            self._pending_job_ids.add(job_id)
+            logger.info(
+                "job_queued",
+                extra={"job_id": job_id, "queue_size": len(self._queue)},
+            )
+            return True
+
+    def get_next(self) -> tuple[str, Callable] | None:
+        """Get the next job from the queue.
+
+        Returns:
+            Tuple of (job_id, func) or None if queue is empty
+        """
+        with self._lock:
+            if not self._queue:
+                return None
+
+            job_id, func = self._queue.popleft()
+            self._pending_job_ids.discard(job_id)
+            return job_id, func
+
+    def is_empty(self) -> bool:
+        """Check if the queue is empty."""
+        with self._lock:
+            return len(self._queue) == 0
+
+    def size(self) -> int:
+        """Get the current queue size."""
+        with self._lock:
+            return len(self._queue)
+
+
+# Global job queue instance
+_job_queue = JobQueue()
+
+
+def get_job_queue() -> JobQueue:
+    """Get the global job queue."""
+    return _job_queue
 
 
 class BotScheduler:

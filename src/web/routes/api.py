@@ -3,11 +3,13 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from src.scheduler.bot_scheduler import get_job_queue
+from src.state.database import get_database
 from src.state.manager import load_state
-from src.web.app import ChromaMemoryDep, ConfigDep, get_chroma_memory, get_config
+from src.web.app import ChromaMemoryDep
 
 if TYPE_CHECKING:
     from src.memory.chroma_client import ChromaMemory
@@ -95,47 +97,43 @@ class StateResponse(BaseModel):
     memory_stats: dict[str, int] | None
 
 
+class JobQueueResponse(BaseModel):
+    """Response model for job queue status."""
+
+    size: int
+    pending_jobs: list[str]
+    is_empty: bool
+
+
 @router.get("/posts/read", response_model=PostsListResponse)
 async def get_read_posts(
     limit: int = 50,
-    memory: ChromaMemoryDep = None,
 ) -> PostsListResponse:
-    """Get last read posts from ChromaDB."""
-
-    if memory is None:
-        return PostsListResponse(posts=[], total=0)
-
+    """Get last read posts from SQLite."""
     try:
-        # Get all posts from the read_posts collection
-        collection = memory.posts_collection
-        count = collection.count()
-
-        if count == 0:
-            return PostsListResponse(posts=[], total=0)
-
-        # Get the posts (ChromaDB returns all if limit > count)
-        results = collection.get(
-            limit=min(limit, count),
-            include=["documents", "metadatas"],
-        )
+        db = await get_database()
+        posts_data = await db.get_read_posts(limit=limit)
+        total = await db.get_read_posts_count()
 
         posts = []
-        for i, doc_id in enumerate(results["ids"]):
+        for post in posts_data:
             posts.append(
                 PostResponse(
-                    id=doc_id,
-                    text=results["documents"][i] if results["documents"] else "",
-                    metadata=results["metadatas"][i] if results["metadatas"] else {},
+                    id=post.get("post_id", ""),
+                    text=post.get("text", ""),
+                    metadata={
+                        "username": post.get("username"),
+                        "display_name": post.get("display_name"),
+                        "post_type": post.get("post_type"),
+                        "url": post.get("url"),
+                        "is_interesting": post.get("is_interesting"),
+                        "read_at": post.get("read_at"),
+                        "post_timestamp": post.get("post_timestamp"),
+                    },
                 )
             )
 
-        # Sort by timestamp descending (most recent first)
-        posts.sort(
-            key=lambda p: p.metadata.get("timestamp", ""),
-            reverse=True,
-        )
-
-        return PostsListResponse(posts=posts[:limit], total=count)
+        return PostsListResponse(posts=posts, total=total)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching read posts: {e}")
@@ -144,158 +142,102 @@ async def get_read_posts(
 @router.get("/posts/written", response_model=WrittenTweetsListResponse)
 async def get_written_tweets(
     limit: int = 50,
-    memory: ChromaMemoryDep = None,
 ) -> WrittenTweetsListResponse:
-    """Get written/posted tweets from state and ChromaDB."""
-    # First try to get from state (more recent with metadata)
-    state = await load_state()
-    tweets_from_state = []
+    """Get written/posted tweets from SQLite."""
+    try:
+        db = await get_database()
+        tweets_data = await db.get_written_tweets(limit=limit)
+        total = await db.get_written_tweets_count()
 
-    for tweet_data in state.written_tweets[-limit:]:
-        timestamp = tweet_data.get("timestamp")
-        if isinstance(timestamp, datetime):
-            timestamp = timestamp.isoformat()
-        elif timestamp is None:
-            timestamp = None
+        tweets = []
+        for tweet in tweets_data:
+            timestamp = tweet.get("created_at")
+            if isinstance(timestamp, datetime):
+                timestamp = timestamp.isoformat()
 
-        tweets_from_state.append(
-            WrittenTweetResponse(
-                text=tweet_data.get("text", ""),
-                timestamp=timestamp,
-                tweet_type=tweet_data.get("tweet_type", "autonomous"),
-            )
-        )
-
-    # Also try to get from ChromaDB for historical data
-    tweets_from_chroma = []
-
-    if memory is not None:
-        try:
-            collection = memory.tweets_collection
-            count = collection.count()
-
-            if count > 0:
-                results = collection.get(
-                    limit=min(limit, count),
-                    include=["documents", "metadatas"],
+            tweets.append(
+                WrittenTweetResponse(
+                    text=tweet.get("text", ""),
+                    timestamp=timestamp,
+                    tweet_type=tweet.get("tweet_type", "autonomous"),
                 )
+            )
 
-                for i, doc_id in enumerate(results["ids"]):
-                    metadata = results["metadatas"][i] if results["metadatas"] else {}
-                    tweets_from_chroma.append(
-                        WrittenTweetResponse(
-                            text=results["documents"][i]
-                            if results["documents"]
-                            else "",
-                            timestamp=metadata.get("timestamp"),
-                            tweet_type=metadata.get("tweet_type", "unknown"),
-                        )
-                    )
-        except Exception:
-            pass  # Ignore ChromaDB errors, use state data
+        return WrittenTweetsListResponse(tweets=tweets, total=total)
 
-    # Combine and deduplicate (prefer state data as it's more recent)
-    all_tweets = tweets_from_state + tweets_from_chroma
-    seen_texts = set()
-    unique_tweets = []
-
-    for tweet in all_tweets:
-        if tweet.text not in seen_texts:
-            seen_texts.add(tweet.text)
-            unique_tweets.append(tweet)
-
-    # Sort by timestamp descending
-    unique_tweets.sort(
-        key=lambda t: t.timestamp or "",
-        reverse=True,
-    )
-
-    return WrittenTweetsListResponse(
-        tweets=unique_tweets[:limit],
-        total=len(unique_tweets),
-    )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching written tweets: {e}")
 
 
 @router.get("/posts/rejected", response_model=RejectedTweetsListResponse)
 async def get_rejected_tweets(limit: int = 50) -> RejectedTweetsListResponse:
-    """Get rejected tweets from state."""
-    state = await load_state()
+    """Get rejected tweets from SQLite."""
+    try:
+        db = await get_database()
+        tweets_data = await db.get_rejected_tweets(limit=limit)
+        total = await db.get_rejected_tweets_count()
 
-    tweets = []
-    for tweet_data in state.rejected_tweets[-limit:]:
-        timestamp = tweet_data.get("timestamp")
-        if isinstance(timestamp, datetime):
-            timestamp = timestamp.isoformat()
-        else:
-            timestamp = str(timestamp) if timestamp else ""
+        tweets = []
+        for tweet in tweets_data:
+            timestamp = tweet.get("rejected_at")
+            if isinstance(timestamp, datetime):
+                timestamp = timestamp.isoformat()
+            else:
+                timestamp = str(timestamp) if timestamp else ""
 
-        tweets.append(
-            RejectedTweetResponse(
-                text=tweet_data.get("text", ""),
-                reason=tweet_data.get("reason", "Unknown"),
-                timestamp=timestamp,
-                operation=tweet_data.get("operation", "unknown"),
+            tweets.append(
+                RejectedTweetResponse(
+                    text=tweet.get("text", ""),
+                    reason=tweet.get("reason", "Unknown"),
+                    timestamp=timestamp,
+                    operation=tweet.get("operation", "unknown"),
+                )
             )
-        )
 
-    # Sort by timestamp descending
-    tweets.sort(key=lambda t: t.timestamp, reverse=True)
+        return RejectedTweetsListResponse(tweets=tweets, total=total)
 
-    return RejectedTweetsListResponse(
-        tweets=tweets[:limit],
-        total=len(state.rejected_tweets),
-    )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching rejected tweets: {e}")
 
 
 @router.get("/analytics/tokens", response_model=TokenAnalyticsResponse)
-async def get_token_analytics() -> TokenAnalyticsResponse:
-    """Get token usage analytics."""
-    state = await load_state()
+async def get_token_analytics(limit: int = 100) -> TokenAnalyticsResponse:
+    """Get token usage analytics from SQLite."""
+    try:
+        db = await get_database()
+        entries_data = await db.get_token_usage(limit=limit)
+        stats = await db.get_token_usage_stats()
 
-    entries = []
-    total_tokens = 0
-    tokens_by_provider: dict[str, int] = {}
-    tokens_by_operation: dict[str, int] = {}
+        entries = []
+        for entry in entries_data:
+            timestamp = entry.get("timestamp")
+            if isinstance(timestamp, datetime):
+                timestamp = timestamp.isoformat()
+            else:
+                timestamp = str(timestamp) if timestamp else ""
 
-    for entry_data in state.token_usage_log:
-        timestamp = entry_data.get("timestamp")
-        if isinstance(timestamp, datetime):
-            timestamp = timestamp.isoformat()
-        else:
-            timestamp = str(timestamp) if timestamp else ""
-
-        provider = entry_data.get("provider", "unknown")
-        operation = entry_data.get("operation", "unknown")
-        entry_total = entry_data.get("total_tokens", 0)
-
-        entries.append(
-            TokenUsageResponse(
-                timestamp=timestamp,
-                provider=provider,
-                model=entry_data.get("model", "unknown"),
-                prompt_tokens=entry_data.get("prompt_tokens", 0),
-                completion_tokens=entry_data.get("completion_tokens", 0),
-                total_tokens=entry_total,
-                operation=operation,
+            entries.append(
+                TokenUsageResponse(
+                    timestamp=timestamp,
+                    provider=entry.get("provider", "unknown"),
+                    model=entry.get("model", "unknown"),
+                    prompt_tokens=entry.get("prompt_tokens", 0),
+                    completion_tokens=entry.get("completion_tokens", 0),
+                    total_tokens=entry.get("total_tokens", 0),
+                    operation=entry.get("operation", "unknown"),
+                )
             )
+
+        return TokenAnalyticsResponse(
+            entries=entries,
+            total_entries=stats.get("total_entries", 0),
+            total_tokens_used=stats.get("total_tokens", 0),
+            tokens_by_provider=stats.get("tokens_by_provider", {}),
+            tokens_by_operation=stats.get("tokens_by_operation", {}),
         )
 
-        total_tokens += entry_total
-        tokens_by_provider[provider] = tokens_by_provider.get(provider, 0) + entry_total
-        tokens_by_operation[operation] = (
-            tokens_by_operation.get(operation, 0) + entry_total
-        )
-
-    # Sort entries by timestamp descending
-    entries.sort(key=lambda e: e.timestamp, reverse=True)
-
-    return TokenAnalyticsResponse(
-        entries=entries,
-        total_entries=len(entries),
-        total_tokens_used=total_tokens,
-        tokens_by_provider=tokens_by_provider,
-        tokens_by_operation=tokens_by_operation,
-    )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching token analytics: {e}")
 
 
 @router.get("/state", response_model=StateResponse)
@@ -303,10 +245,22 @@ async def get_state(memory: ChromaMemoryDep = None) -> StateResponse:
     """Get current bot state."""
     state = await load_state()
 
+    # Get SQLite database stats
     memory_stats = None
+    try:
+        db = await get_database()
+        memory_stats = await db.get_stats()
+    except Exception:
+        pass
+
+    # Merge with ChromaDB stats if available
     if memory is not None:
         try:
-            memory_stats = memory.get_stats()
+            chroma_stats = memory.get_stats()
+            if memory_stats:
+                memory_stats.update(chroma_stats)
+            else:
+                memory_stats = chroma_stats
         except Exception:
             pass
 
@@ -327,3 +281,19 @@ async def get_state(memory: ChromaMemoryDep = None) -> StateResponse:
         last_notification_check_time=last_notification_check,
         memory_stats=memory_stats,
     )
+
+
+@router.get("/queue", response_model=JobQueueResponse)
+async def get_job_queue_status() -> JobQueueResponse:
+    """Get current job queue status."""
+    job_queue = get_job_queue()
+
+    # Get pending job IDs from the queue
+    pending_jobs = list(job_queue._pending_job_ids)
+
+    return JobQueueResponse(
+        size=job_queue.size(),
+        pending_jobs=pending_jobs,
+        is_empty=job_queue.is_empty(),
+    )
+

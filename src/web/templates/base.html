@@ -1,9 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000" id="theme-color-meta">
+    <meta name="color-scheme" content="dark light">
     <title>{% block title %}X Bot Dashboard{% endblock %}</title>
+    
+    <!-- Preload critical resources -->
+    <link rel="preconnect" href="https://unpkg.com">
     
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -11,33 +16,73 @@
     <!-- Custom styles -->
     <link rel="stylesheet" href="/static/styles.css">
     
+    <!-- Theme initialization (prevent flash) -->
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 
+                (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+            document.documentElement.setAttribute('data-theme', theme);
+            document.getElementById('theme-color-meta').content = theme === 'dark' ? '#000000' : '#ffffff';
+        })();
+    </script>
+    
     {% block head %}{% endblock %}
 </head>
 <body>
     <div class="app-container">
-        <!-- Navigation -->
-        <nav class="sidebar">
-            <div class="logo">
+        <!-- Sidebar Navigation (Desktop/Tablet) -->
+        <nav class="sidebar" id="sidebar">
+            <a href="/" class="logo">
                 <span class="logo-icon">𝕏</span>
-                <span class="logo-text">Bot Dashboard</span>
-            </div>
+                <span class="logo-text">Bot</span>
+            </a>
             
             <ul class="nav-links">
                 <li>
                     <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
-                        <span class="nav-icon">◉</span>
-                        <span>Dashboard</span>
+                        <span class="nav-icon">
+                            {% if request.url.path == '/' %}
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                                <path d="M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913H9.14c.51 0 .929-.41.929-.913v-7.075h3.909v7.075c0 .502.417.913.928.913h6.165c.511 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.409-.758z"/>
+                            </svg>
+                            {% else %}
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                                <path d="M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638c.511 0 .929-.41.929-.913v-7.075h3.008v7.075c0 .502.418.913.929.913h6.638c.511 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.409-.758zM20 20l-4.5.01V13c0-.502-.418-.913-.929-.913H9.43c-.511 0-.929.41-.929.913l-.01 7.01H4V8.773l8-5.27 8 5.27V20z"/>
+                            </svg>
+                            {% endif %}
+                        </span>
+                        <span>Home</span>
                     </a>
                 </li>
                 <li>
                     <a href="/posts" class="nav-link {% if request.url.path == '/posts' %}active{% endif %}">
-                        <span class="nav-icon">✎</span>
+                        <span class="nav-icon">
+                            {% if request.url.path == '/posts' %}
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                                <path d="M23 3c-6.62-.1-10.38 2.421-13.05 6.03C7.29 12.61 6 17.331 6 22h2c0-1.007.07-2.012.19-3H12c4.1 0 7.48-3.082 7.94-7.054C22.79 10.147 23.17 6.359 23 3zm-7 8h-1.5v2H16c.63-.016 1.2-.08 1.72-.188C16.95 15.24 14.68 17 12 17H8.55c.57-2.512 1.57-4.851 3-6.78 2.16-2.912 5.29-4.911 9.45-5.187C20.95 8.079 19.9 11 16 11zM4 9V6H1V4h3V1h2v3h3v2H6v3H4z"/>
+                            </svg>
+                            {% else %}
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                                <path d="M23 3c-6.62-.1-10.38 2.421-13.05 6.03C7.29 12.61 6 17.331 6 22h2c0-1.007.07-2.012.19-3H12c4.1 0 7.48-3.082 7.94-7.054C22.79 10.147 23.17 6.359 23 3zm-7 8h-1.5v2H16c.63-.016 1.2-.08 1.72-.188C16.95 15.24 14.68 17 12 17H8.55c.57-2.512 1.57-4.851 3-6.78 2.16-2.912 5.29-4.911 9.45-5.187C20.95 8.079 19.9 11 16 11zM4 9V6H1V4h3V1h2v3h3v2H6v3H4z"/>
+                            </svg>
+                            {% endif %}
+                        </span>
                         <span>Posts</span>
                     </a>
                 </li>
                 <li>
                     <a href="/analytics" class="nav-link {% if request.url.path == '/analytics' %}active{% endif %}">
-                        <span class="nav-icon">◧</span>
+                        <span class="nav-icon">
+                            {% if request.url.path == '/analytics' %}
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                                <path d="M8.75 21V3h2v18h-2zM18 21V8.5h2V21h-2zM4 21l.004-10h2L6 21H4zm9.248 0v-7h2v7h-2z"/>
+                            </svg>
+                            {% else %}
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                                <path d="M8.75 21V3h2v18h-2zM18 21V8.5h2V21h-2zM4 21l.004-10h2L6 21H4zm9.248 0v-7h2v7h-2z"/>
+                            </svg>
+                            {% endif %}
+                        </span>
                         <span>Analytics</span>
                     </a>
                 </li>
@@ -46,7 +91,7 @@
             <div class="nav-footer">
                 <div class="status-indicator">
                     <span class="status-dot"></span>
-                    <span class="status-text">System Active</span>
+                    <span class="status-text">Active</span>
                 </div>
             </div>
         </nav>
@@ -57,6 +102,10 @@
                 <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
                 <div class="header-actions">
                     {% block header_actions %}{% endblock %}
+                    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                        <span class="icon-sun">☀️</span>
+                        <span class="icon-moon">🌙</span>
+                    </button>
                 </div>
             </header>
             
@@ -64,9 +113,76 @@
                 {% block content %}{% endblock %}
             </div>
         </main>
+        
+        <!-- Bottom Navigation (Mobile) -->
+        <nav class="bottom-nav">
+            <ul class="bottom-nav-links">
+                <li>
+                    <a href="/" class="bottom-nav-link {% if request.url.path == '/' %}active{% endif %}">
+                        <span class="nav-icon">
+                            {% if request.url.path == '/' %}
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                <path d="M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913H9.14c.51 0 .929-.41.929-.913v-7.075h3.909v7.075c0 .502.417.913.928.913h6.165c.511 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.409-.758z"/>
+                            </svg>
+                            {% else %}
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                <path d="M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638c.511 0 .929-.41.929-.913v-7.075h3.008v7.075c0 .502.418.913.929.913h6.638c.511 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.409-.758zM20 20l-4.5.01V13c0-.502-.418-.913-.929-.913H9.43c-.511 0-.929.41-.929.913l-.01 7.01H4V8.773l8-5.27 8 5.27V20z"/>
+                            </svg>
+                            {% endif %}
+                        </span>
+                        <span>Home</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/posts" class="bottom-nav-link {% if request.url.path == '/posts' %}active{% endif %}">
+                        <span class="nav-icon">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                <path d="M23 3c-6.62-.1-10.38 2.421-13.05 6.03C7.29 12.61 6 17.331 6 22h2c0-1.007.07-2.012.19-3H12c4.1 0 7.48-3.082 7.94-7.054C22.79 10.147 23.17 6.359 23 3zm-7 8h-1.5v2H16c.63-.016 1.2-.08 1.72-.188C16.95 15.24 14.68 17 12 17H8.55c.57-2.512 1.57-4.851 3-6.78 2.16-2.912 5.29-4.911 9.45-5.187C20.95 8.079 19.9 11 16 11zM4 9V6H1V4h3V1h2v3h3v2H6v3H4z"/>
+                            </svg>
+                        </span>
+                        <span>Posts</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/analytics" class="bottom-nav-link {% if request.url.path == '/analytics' %}active{% endif %}">
+                        <span class="nav-icon">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                <path d="M8.75 21V3h2v18h-2zM18 21V8.5h2V21h-2zM4 21l.004-10h2L6 21H4zm9.248 0v-7h2v7h-2z"/>
+                            </svg>
+                        </span>
+                        <span>Analytics</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
     </div>
+    
+    <!-- Theme Toggle Script -->
+    <script>
+        (function() {
+            const toggle = document.getElementById('theme-toggle');
+            const meta = document.getElementById('theme-color-meta');
+            
+            function setTheme(theme) {
+                document.documentElement.setAttribute('data-theme', theme);
+                localStorage.setItem('theme', theme);
+                meta.content = theme === 'dark' ? '#000000' : '#ffffff';
+            }
+            
+            toggle.addEventListener('click', () => {
+                const current = document.documentElement.getAttribute('data-theme');
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
+            
+            // Listen for system theme changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+                if (!localStorage.getItem('theme')) {
+                    setTheme(e.matches ? 'dark' : 'light');
+                }
+            });
+        })();
+    </script>
     
     {% block scripts %}{% endblock %}
 </body>
 </html>
-

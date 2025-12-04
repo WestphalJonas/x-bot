@@ -26,6 +26,15 @@ class AgentState(BaseModel):
     last_counter_reset: datetime | None = Field(
         default=None, description="Timestamp of last counter reset (UTC date)"
     )
+    bot_started_at: datetime | None = Field(
+        default=None, description="Timestamp when the bot was started"
+    )
+    last_action: str | None = Field(
+        default=None, description="Description of the last action performed"
+    )
+    last_action_time: datetime | None = Field(
+        default=None, description="Timestamp of the last action"
+    )
     mood: str = Field(
         default="neutral", description="Current mood state (for future use)"
     )

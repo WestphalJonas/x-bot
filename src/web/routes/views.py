@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from src.scheduler.bot_scheduler import get_job_queue
+from src.state.database import get_database
 from src.state.manager import load_state
 from src.web.app import ChromaMemoryDep, ConfigDep, get_chroma_memory, get_config
 
@@ -26,12 +28,32 @@ async def dashboard(
     # Get state for overview stats
     state = await load_state()
 
-    memory_stats = None
+    # Get SQLite stats
+    db_stats = None
+    try:
+        db = await get_database()
+        db_stats = await db.get_stats()
+    except Exception:
+        pass
+
+    # Merge with ChromaDB stats if available
     if memory is not None:
         try:
-            memory_stats = memory.get_stats()
+            chroma_stats = memory.get_stats()
+            if db_stats:
+                db_stats.update(chroma_stats)
+            else:
+                db_stats = chroma_stats
         except Exception:
             pass
+
+    # Get job queue status
+    job_queue = get_job_queue()
+    job_queue_info = {
+        "size": job_queue.size(),
+        "pending_jobs": list(job_queue._pending_job_ids),
+        "is_empty": job_queue.is_empty(),
+    }
 
     return templates.TemplateResponse(
         "dashboard.html",
@@ -39,7 +61,8 @@ async def dashboard(
             "request": request,
             "state": state,
             "config": config,
-            "memory_stats": memory_stats,
+            "stats": db_stats,
+            "job_queue": job_queue_info,
         },
     )
 
@@ -75,48 +98,36 @@ async def analytics_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/partials/posts/read", response_class=HTMLResponse)
-async def posts_read_partial(
-    request: Request,
-    memory: ChromaMemoryDep = None,
-) -> HTMLResponse:
+async def posts_read_partial(request: Request) -> HTMLResponse:
     """Partial for read posts list (HTMX)."""
     templates = request.app.state.templates
 
     posts = []
     total = 0
 
-    if memory is not None:
-        try:
-            collection = memory.posts_collection
-            count = collection.count()
-            total = count
+    try:
+        db = await get_database()
+        posts_data = await db.get_read_posts(limit=50)
+        total = await db.get_read_posts_count()
 
-            if count > 0:
-                results = collection.get(
-                    limit=min(50, count),
-                    include=["documents", "metadatas"],
-                )
-
-                for i, doc_id in enumerate(results["ids"]):
-                    posts.append(
-                        {
-                            "id": doc_id,
-                            "text": results["documents"][i]
-                            if results["documents"]
-                            else "",
-                            "metadata": results["metadatas"][i]
-                            if results["metadatas"]
-                            else {},
-                        }
-                    )
-
-                # Sort by timestamp descending
-                posts.sort(
-                    key=lambda p: p["metadata"].get("timestamp", ""),
-                    reverse=True,
-                )
-        except Exception:
-            pass
+        for post in posts_data:
+            posts.append(
+                {
+                    "id": post.get("post_id", ""),
+                    "text": post.get("text", ""),
+                    "metadata": {
+                        "username": post.get("username"),
+                        "display_name": post.get("display_name"),
+                        "post_type": post.get("post_type"),
+                        "url": post.get("url"),
+                        "is_interesting": post.get("is_interesting"),
+                        "timestamp": post.get("read_at"),
+                        "post_timestamp": post.get("post_timestamp"),
+                    },
+                }
+            )
+    except Exception:
+        pass
 
     return templates.TemplateResponse(
         "partials/posts_list.html",
@@ -130,69 +141,35 @@ async def posts_read_partial(
 
 
 @router.get("/partials/posts/written", response_class=HTMLResponse)
-async def posts_written_partial(
-    request: Request,
-    memory: ChromaMemoryDep = None,
-) -> HTMLResponse:
+async def posts_written_partial(request: Request) -> HTMLResponse:
     """Partial for written tweets list (HTMX)."""
     templates = request.app.state.templates
 
-    state = await load_state()
-
     tweets = []
+    total = 0
 
-    # Get from state first
-    for tweet_data in state.written_tweets:
-        tweets.append(
-            {
-                "text": tweet_data.get("text", ""),
-                "timestamp": tweet_data.get("timestamp"),
-                "tweet_type": tweet_data.get("tweet_type", "autonomous"),
-            }
-        )
+    try:
+        db = await get_database()
+        tweets_data = await db.get_written_tweets(limit=50)
+        total = await db.get_written_tweets_count()
 
-    # Also get from ChromaDB
-    if memory is not None:
-        try:
-            collection = memory.tweets_collection
-            count = collection.count()
-
-            if count > 0:
-                results = collection.get(
-                    limit=min(50, count),
-                    include=["documents", "metadatas"],
-                )
-
-                seen_texts = {t["text"] for t in tweets}
-
-                for i, doc_id in enumerate(results["ids"]):
-                    text = results["documents"][i] if results["documents"] else ""
-                    if text not in seen_texts:
-                        metadata = (
-                            results["metadatas"][i] if results["metadatas"] else {}
-                        )
-                        tweets.append(
-                            {
-                                "text": text,
-                                "timestamp": metadata.get("timestamp"),
-                                "tweet_type": metadata.get("tweet_type", "unknown"),
-                            }
-                        )
-        except Exception:
-            pass
-
-    # Sort by timestamp descending
-    tweets.sort(
-        key=lambda t: str(t.get("timestamp") or ""),
-        reverse=True,
-    )
+        for tweet in tweets_data:
+            tweets.append(
+                {
+                    "text": tweet.get("text", ""),
+                    "timestamp": tweet.get("created_at"),
+                    "tweet_type": tweet.get("tweet_type", "autonomous"),
+                }
+            )
+    except Exception:
+        pass
 
     return templates.TemplateResponse(
         "partials/tweets_list.html",
         {
             "request": request,
-            "tweets": tweets[:50],
-            "total": len(tweets),
+            "tweets": tweets,
+            "total": total,
             "tweet_type": "written",
         },
     )
@@ -203,31 +180,32 @@ async def posts_rejected_partial(request: Request) -> HTMLResponse:
     """Partial for rejected tweets list (HTMX)."""
     templates = request.app.state.templates
 
-    state = await load_state()
-
     tweets = []
-    for tweet_data in state.rejected_tweets:
-        tweets.append(
-            {
-                "text": tweet_data.get("text", ""),
-                "reason": tweet_data.get("reason", "Unknown"),
-                "timestamp": tweet_data.get("timestamp"),
-                "operation": tweet_data.get("operation", "unknown"),
-            }
-        )
+    total = 0
 
-    # Sort by timestamp descending
-    tweets.sort(
-        key=lambda t: str(t.get("timestamp") or ""),
-        reverse=True,
-    )
+    try:
+        db = await get_database()
+        tweets_data = await db.get_rejected_tweets(limit=50)
+        total = await db.get_rejected_tweets_count()
+
+        for tweet in tweets_data:
+            tweets.append(
+                {
+                    "text": tweet.get("text", ""),
+                    "reason": tweet.get("reason", "Unknown"),
+                    "timestamp": tweet.get("rejected_at"),
+                    "operation": tweet.get("operation", "unknown"),
+                }
+            )
+    except Exception:
+        pass
 
     return templates.TemplateResponse(
         "partials/rejected_list.html",
         {
             "request": request,
-            "tweets": tweets[:50],
-            "total": len(tweets),
+            "tweets": tweets,
+            "total": total,
         },
     )
 
@@ -237,48 +215,43 @@ async def analytics_tokens_partial(request: Request) -> HTMLResponse:
     """Partial for token usage analytics (HTMX)."""
     templates = request.app.state.templates
 
-    state = await load_state()
-
     entries = []
     total_tokens = 0
     tokens_by_provider: dict[str, int] = {}
     tokens_by_operation: dict[str, int] = {}
+    total_entries = 0
 
-    for entry_data in state.token_usage_log:
-        provider = entry_data.get("provider", "unknown")
-        operation = entry_data.get("operation", "unknown")
-        entry_total = entry_data.get("total_tokens", 0)
+    try:
+        db = await get_database()
+        entries_data = await db.get_token_usage(limit=100)
+        stats = await db.get_token_usage_stats()
 
-        entries.append(
-            {
-                "timestamp": entry_data.get("timestamp"),
-                "provider": provider,
-                "model": entry_data.get("model", "unknown"),
-                "prompt_tokens": entry_data.get("prompt_tokens", 0),
-                "completion_tokens": entry_data.get("completion_tokens", 0),
-                "total_tokens": entry_total,
-                "operation": operation,
-            }
-        )
+        total_tokens = stats.get("total_tokens", 0)
+        total_entries = stats.get("total_entries", 0)
+        tokens_by_provider = stats.get("tokens_by_provider", {})
+        tokens_by_operation = stats.get("tokens_by_operation", {})
 
-        total_tokens += entry_total
-        tokens_by_provider[provider] = tokens_by_provider.get(provider, 0) + entry_total
-        tokens_by_operation[operation] = (
-            tokens_by_operation.get(operation, 0) + entry_total
-        )
-
-    # Sort by timestamp descending
-    entries.sort(
-        key=lambda e: str(e.get("timestamp") or ""),
-        reverse=True,
-    )
+        for entry in entries_data:
+            entries.append(
+                {
+                    "timestamp": entry.get("timestamp"),
+                    "provider": entry.get("provider", "unknown"),
+                    "model": entry.get("model", "unknown"),
+                    "prompt_tokens": entry.get("prompt_tokens", 0),
+                    "completion_tokens": entry.get("completion_tokens", 0),
+                    "total_tokens": entry.get("total_tokens", 0),
+                    "operation": entry.get("operation", "unknown"),
+                }
+            )
+    except Exception:
+        pass
 
     return templates.TemplateResponse(
         "partials/token_analytics.html",
         {
             "request": request,
-            "entries": entries[:100],
-            "total_entries": len(entries),
+            "entries": entries,
+            "total_entries": total_entries,
             "total_tokens": total_tokens,
             "tokens_by_provider": tokens_by_provider,
             "tokens_by_operation": tokens_by_operation,

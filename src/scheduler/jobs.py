@@ -24,7 +24,8 @@ from src.x.notifications import check_notifications as check_notifications_func
 from src.x.posting import post_tweet
 from src.x.reading import read_frontpage_posts as read_posts_from_frontpage
 from src.x.session import AsyncTwitterSession
-from src.web.data_tracker import log_written_tweet
+from src.state.database import get_database
+from src.web.data_tracker import log_action, log_rejected_tweet, log_written_tweet
 
 logger = logging.getLogger(__name__)
 
@@ -185,24 +186,13 @@ async def _post_autonomous_tweet_async(
     is_valid, error_message = await llm_client.validate_tweet(tweet_text)
     if not is_valid:
         logger.error("tweet_validation_failed", extra={"error": error_message})
-        # Log rejected tweet for dashboard - save directly to ensure persistence
+        # Log rejected tweet for dashboard
         try:
-            state = await load_state()
-            entry = {
-                "text": tweet_text,
-                "reason": error_message,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "operation": "autonomous",
-            }
-            state.rejected_tweets.append(entry)
-            # Keep only last entries
-            if len(state.rejected_tweets) > QueueLimits.REJECTED_TWEETS:
-                state.rejected_tweets = state.rejected_tweets[
-                    -QueueLimits.REJECTED_TWEETS :
-                ]
-            await save_state(state)
-            # Give I/O time to complete before raising exception
-            await asyncio.sleep(0.1)
+            await log_rejected_tweet(
+                text=tweet_text,
+                reason=error_message,
+                operation="autonomous",
+            )
             logger.info("rejected_tweet_saved", extra={"reason": error_message})
         except Exception as save_error:
             logger.error(
@@ -255,6 +245,9 @@ async def _post_autonomous_tweet_async(
             logger.info(
                 "state_updated", extra={"posts_today": state.counters["posts_today"]}
             )
+
+            # Log action
+            await log_action("Posted autonomous tweet")
 
             logger.info("bot_completed_successfully")
 
@@ -367,6 +360,9 @@ async def _read_frontpage_posts_async(
                 },
             )
 
+        # Get database for tracking read posts
+        db = await get_database()
+
         # Evaluate posts for interest if LLM client is available (outside browser session)
         interesting_posts = []
         if llm_client and posts:
@@ -379,6 +375,13 @@ async def _read_frontpage_posts_async(
             )
 
             for post in posts:
+                # Skip posts already seen (stored in SQLite)
+                if post.post_id and await db.has_seen_post(post.post_id):
+                    logger.info(
+                        "post_skipped_already_seen",
+                        extra={"post_id": post.post_id, "username": post.username},
+                    )
+                    continue
                 # Skip posts already in queue
                 if post.post_id in queued_post_ids:
                     logger.info(
@@ -414,6 +417,10 @@ async def _read_frontpage_posts_async(
                     # Collect interesting posts
                     if is_interesting:
                         interesting_posts.append(post)
+
+                    # Store post in SQLite (regardless of interest)
+                    if post.post_id:
+                        await db.store_read_post(post)
 
                 except Exception as e:
                     # Handle LLM failures gracefully
@@ -494,6 +501,9 @@ async def _read_frontpage_posts_async(
             # Mark all posts as not evaluated
             for post in posts:
                 post.is_interesting = None
+
+        # Log action
+        await log_action(f"Read {len(posts)} posts from timeline")
 
         logger.info("reading_completed_successfully")
 
@@ -651,6 +661,9 @@ async def _check_notifications_async(
             state.last_notification_check_time = datetime.now(timezone.utc)
             await save_state(state)
             logger.info("no_new_notifications")
+
+        # Log action
+        await log_action(f"Checked notifications ({len(new_notifications)} new)")
 
         logger.info("notification_checking_completed_successfully")
 
@@ -849,24 +862,13 @@ async def _process_inspiration_queue_async(
                     "inspiration_tweet_validation_failed",
                     extra={"error": error_message, "attempts": max_attempts},
                 )
-                # Log rejected tweet for dashboard - save directly to ensure persistence
+                # Log rejected tweet for dashboard
                 try:
-                    state = await load_state()
-                    entry = {
-                        "text": tweet_text,
-                        "reason": error_message,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "operation": "inspiration",
-                    }
-                    state.rejected_tweets.append(entry)
-                    # Keep only last 50 entries
-                    if len(state.rejected_tweets) > QueueLimits.REJECTED_TWEETS:
-                        state.rejected_tweets = state.rejected_tweets[
-                            -QueueLimits.REJECTED_TWEETS :
-                        ]
-                    await save_state(state)
-                    # Give I/O time to complete before raising exception
-                    await asyncio.sleep(0.1)
+                    await log_rejected_tweet(
+                        text=tweet_text,
+                        reason=error_message,
+                        operation="inspiration",
+                    )
                     logger.info("rejected_tweet_saved", extra={"reason": error_message})
                 except Exception as save_error:
                     logger.error(
@@ -923,6 +925,9 @@ async def _process_inspiration_queue_async(
                 current_state.last_post_time = datetime.now(timezone.utc)
 
                 await save_state(current_state)
+
+                # Log action
+                await log_action("Posted inspiration tweet")
             else:
                 logger.error("failed_to_post_inspiration_tweet")
 

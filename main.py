@@ -1,22 +1,25 @@
 """Main entry point for autonomous Twitter/X posting bot."""
 
+import asyncio
 import logging
 import os
 import signal
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from src.core.config import BotConfig, EnvSettings
 from src.scheduler import BotScheduler
-from src.scheduler.bot_scheduler import get_job_lock
+from src.scheduler.bot_scheduler import get_job_lock, get_job_queue
 from src.scheduler.jobs import (
     check_notifications,
     post_autonomous_tweet,
     process_inspiration_queue,
     read_frontpage_posts,
 )
+from src.state.manager import load_state, save_state
 
 # Configure logging
 logging.basicConfig(
@@ -67,10 +70,23 @@ def validate_env_settings(env_settings: EnvSettings) -> None:
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
 
+async def set_bot_started() -> None:
+    """Set the bot_started_at timestamp in state."""
+    state = await load_state()
+    state.bot_started_at = datetime.now(timezone.utc)
+    state.last_action = "Bot started"
+    state.last_action_time = datetime.now(timezone.utc)
+    await save_state(state)
+    logger.info(
+        "bot_started_at_set", extra={"timestamp": state.bot_started_at.isoformat()}
+    )
+
+
 def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
     """Create a wrapper function for a job that passes config and env_settings.
 
-    Uses a global lock to prevent parallel job execution.
+    Uses a global lock to prevent parallel job execution. When the lock is busy,
+    jobs are queued instead of skipped and processed after the current job completes.
 
     Args:
         job_func: Job function to wrap
@@ -80,14 +96,45 @@ def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
     Returns:
         Wrapped function that can be called without arguments
     """
+    job_id = job_func.__name__
+
+    def run_job():
+        """Execute the actual job."""
+        job_func(config, env_settings)
+
+    def process_queue():
+        """Process any pending jobs in the queue."""
+        job_queue = get_job_queue()
+        while not job_queue.is_empty():
+            next_job = job_queue.get_next()
+            if next_job:
+                next_job_id, next_func = next_job
+                logger.info(
+                    "processing_queued_job",
+                    extra={"job_id": next_job_id, "remaining": job_queue.size()},
+                )
+                try:
+                    next_func()
+                except Exception as e:
+                    logger.error(
+                        "queued_job_failed",
+                        extra={"job_id": next_job_id, "error": str(e)},
+                        exc_info=True,
+                    )
 
     def wrapper():
         lock = get_job_lock()
+        job_queue = get_job_queue()
+
         if not lock.acquire(blocking=False):
-            logger.info("job_skipped_lock_held", extra={"job": job_func.__name__})
+            # Lock is held - queue this job instead of skipping
+            job_queue.add_job(job_id, run_job)
             return
+
         try:
-            job_func(config, env_settings)
+            run_job()
+            # After completing, process any queued jobs
+            process_queue()
         finally:
             lock.release()
 
@@ -139,6 +186,9 @@ def main():
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+
+    # Set bot started timestamp
+    asyncio.run(set_bot_started())
 
     # Start scheduler
     try:

@@ -5,35 +5,37 @@
 
 {% block content %}
 <div class="posts-container">
-    <!-- Tabs -->
-    <div class="tabs">
-        <button class="tab {% if active_tab == 'read' %}active{% endif %}" 
-                hx-get="/partials/posts/read" 
-                hx-target="#posts-content"
-                hx-swap="innerHTML"
-                onclick="setActiveTab(this)">
-            📖 Read Posts
-        </button>
-        <button class="tab {% if active_tab == 'written' %}active{% endif %}"
-                hx-get="/partials/posts/written" 
-                hx-target="#posts-content"
-                hx-swap="innerHTML"
-                onclick="setActiveTab(this)">
-            ✍️ Written Tweets
-        </button>
-        <button class="tab {% if active_tab == 'rejected' %}active{% endif %}"
-                hx-get="/partials/posts/rejected" 
-                hx-target="#posts-content"
-                hx-swap="innerHTML"
-                onclick="setActiveTab(this)">
-            ❌ Rejected
-        </button>
+    <!-- Tabs Navigation -->
+    <div class="posts-header">
+        <div class="tabs">
+            <button class="tab {% if active_tab == 'read' %}active{% endif %}" 
+                    hx-get="/partials/posts/read" 
+                    hx-target="#posts-content"
+                    hx-swap="innerHTML"
+                    onclick="setActiveTab(this)">
+                Read
+            </button>
+            <button class="tab {% if active_tab == 'written' %}active{% endif %}"
+                    hx-get="/partials/posts/written" 
+                    hx-target="#posts-content"
+                    hx-swap="innerHTML"
+                    onclick="setActiveTab(this)">
+                Written
+            </button>
+            <button class="tab {% if active_tab == 'rejected' %}active{% endif %}"
+                    hx-get="/partials/posts/rejected" 
+                    hx-target="#posts-content"
+                    hx-swap="innerHTML"
+                    onclick="setActiveTab(this)">
+                Rejected
+            </button>
+        </div>
     </div>
     
     <!-- Content area -->
     <div id="posts-content" class="posts-content"
          hx-get="/partials/posts/{{ active_tab }}"
-         hx-trigger="load"
+         hx-trigger="load, every 30s, refresh"
          hx-swap="innerHTML">
         <div class="loading">
             <div class="loading-spinner"></div>
@@ -44,9 +46,8 @@
 
 <script>
 function setActiveTab(button) {
-    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     button.classList.add('active');
 }
 </script>
 {% endblock %}
-

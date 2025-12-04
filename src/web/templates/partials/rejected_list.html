@@ -9,7 +9,7 @@
     <div class="post-card rejected-card">
         <div class="post-header">
             <span class="tweet-type badge-rejected">{{ tweet.operation | capitalize }}</span>
-            <span class="post-time">{{ tweet.timestamp[:19] if tweet.timestamp else 'Unknown time' }}</span>
+            <span class="post-time">{{ tweet.timestamp[:16].replace('T', ' ') if tweet.timestamp else '' }}</span>
         </div>
         <div class="post-text">{{ tweet.text }}</div>
         <div class="rejection-reason">
@@ -22,8 +22,7 @@
 {% else %}
 <div class="empty-state">
     <div class="empty-icon">✅</div>
-    <p>No rejected tweets</p>
-    <p class="empty-hint">All tweets have passed validation. Nice!</p>
+    <p class="empty-title">No rejected tweets</p>
+    <p class="empty-hint">All tweets have passed validation.</p>
 </div>
 {% endif %}
-

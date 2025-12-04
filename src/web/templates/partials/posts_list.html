@@ -8,12 +8,20 @@
     {% for post in posts %}
     <div class="post-card">
         <div class="post-header">
-            <span class="post-author">{{ post.metadata.get('author', 'Unknown') }}</span>
-            <span class="post-time">{{ post.metadata.get('timestamp', '')[:19] if post.metadata.get('timestamp') else 'Unknown time' }}</span>
+            <span class="post-author">
+                <span class="display-name">{{ post.metadata.get('display_name') or post.metadata.get('username') or 'Unknown' }}</span>
+                {% if post.metadata.get('username') %}
+                <span class="username">@{{ post.metadata.get('username').lstrip('@') }}</span>
+                {% endif %}
+            </span>
+            <span class="post-time">{{ post.metadata.get('timestamp', '')[:16].replace('T', ' ') if post.metadata.get('timestamp') else '' }}</span>
         </div>
         <div class="post-text">{{ post.text }}</div>
         <div class="post-footer">
-            <span class="post-id">ID: {{ post.id[:12] }}...</span>
+            <span class="post-id font-mono">{{ post.id[:16] if post.id else '' }}...</span>
+            {% if post.metadata.get('is_interesting') == 1 %}
+            <span class="badge interesting-badge">Interesting</span>
+            {% endif %}
         </div>
     </div>
     {% endfor %}
@@ -21,8 +29,7 @@
 {% else %}
 <div class="empty-state">
     <div class="empty-icon">📭</div>
-    <p>No read posts found</p>
+    <p class="empty-title">No read posts</p>
     <p class="empty-hint">Posts will appear here once the bot reads from the frontpage.</p>
 </div>
 {% endif %}
-

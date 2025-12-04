@@ -3,8 +3,8 @@
     <div class="summary-card">
         <div class="summary-icon">🔢</div>
         <div class="summary-content">
-            <div class="summary-value">{{ total_tokens | default(0) }}</div>
-            <div class="summary-label">Total Tokens Used</div>
+            <div class="summary-value">{{ "{:,}".format(total_tokens | default(0)) }}</div>
+            <div class="summary-label">Total Tokens</div>
         </div>
     </div>
     
@@ -12,7 +12,7 @@
         <div class="summary-icon">📊</div>
         <div class="summary-content">
             <div class="summary-value">{{ total_entries | default(0) }}</div>
-            <div class="summary-label">Total LLM Calls</div>
+            <div class="summary-label">LLM Calls</div>
         </div>
     </div>
 </div>
@@ -20,20 +20,24 @@
 <!-- Breakdown by Provider -->
 {% if tokens_by_provider %}
 <div class="analytics-section">
-    <h3 class="section-title">Tokens by Provider</h3>
-    <div class="breakdown-grid">
-        {% for provider, tokens in tokens_by_provider.items() %}
-        <div class="breakdown-item">
-            <div class="breakdown-header">
-                <span class="breakdown-label">{{ provider | capitalize }}</span>
-                <span class="breakdown-value">{{ tokens }}</span>
+    <div class="section-header">
+        <h3 class="section-title">By Provider</h3>
+    </div>
+    <div class="section-content">
+        <div class="breakdown-grid">
+            {% for provider, tokens in tokens_by_provider.items() %}
+            <div class="breakdown-item">
+                <div class="breakdown-header">
+                    <span class="breakdown-label">{{ provider | capitalize }}</span>
+                    <span class="breakdown-value">{{ "{:,}".format(tokens) }}</span>
+                </div>
+                <div class="progress-bar">
+                    {% set pct = (tokens / total_tokens * 100) | int if total_tokens > 0 else 0 %}
+                    <div class="progress-fill provider-{{ provider }}" style="width: {{ pct }}%"></div>
+                </div>
             </div>
-            <div class="progress-bar">
-                {% set pct = (tokens / total_tokens * 100) | int if total_tokens > 0 else 0 %}
-                <div class="progress-fill provider-{{ provider }}" style="width: {{ pct }}%"></div>
-            </div>
+            {% endfor %}
         </div>
-        {% endfor %}
     </div>
 </div>
 {% endif %}
@@ -41,27 +45,33 @@
 <!-- Breakdown by Operation -->
 {% if tokens_by_operation %}
 <div class="analytics-section">
-    <h3 class="section-title">Tokens by Operation</h3>
-    <div class="breakdown-grid">
-        {% for operation, tokens in tokens_by_operation.items() %}
-        <div class="breakdown-item">
-            <div class="breakdown-header">
-                <span class="breakdown-label">{{ operation | replace('_', ' ') | capitalize }}</span>
-                <span class="breakdown-value">{{ tokens }}</span>
+    <div class="section-header">
+        <h3 class="section-title">By Operation</h3>
+    </div>
+    <div class="section-content">
+        <div class="breakdown-grid">
+            {% for operation, tokens in tokens_by_operation.items() %}
+            <div class="breakdown-item">
+                <div class="breakdown-header">
+                    <span class="breakdown-label">{{ operation | replace('_', ' ') | capitalize }}</span>
+                    <span class="breakdown-value">{{ "{:,}".format(tokens) }}</span>
+                </div>
+                <div class="progress-bar">
+                    {% set pct = (tokens / total_tokens * 100) | int if total_tokens > 0 else 0 %}
+                    <div class="progress-fill operation-{{ operation }}" style="width: {{ pct }}%"></div>
+                </div>
             </div>
-            <div class="progress-bar">
-                {% set pct = (tokens / total_tokens * 100) | int if total_tokens > 0 else 0 %}
-                <div class="progress-fill operation-{{ operation }}" style="width: {{ pct }}%"></div>
-            </div>
+            {% endfor %}
         </div>
-        {% endfor %}
     </div>
 </div>
 {% endif %}
 
 <!-- Recent Entries -->
 <div class="analytics-section">
-    <h3 class="section-title">Recent LLM Calls</h3>
+    <div class="section-header">
+        <h3 class="section-title">Recent Calls</h3>
+    </div>
     
     {% if entries %}
     <div class="entries-table-container">
@@ -72,20 +82,16 @@
                     <th>Provider</th>
                     <th>Model</th>
                     <th>Operation</th>
-                    <th>Prompt</th>
-                    <th>Completion</th>
-                    <th>Total</th>
+                    <th>Tokens</th>
                 </tr>
             </thead>
             <tbody>
                 {% for entry in entries %}
                 <tr>
-                    <td class="time-cell">{{ entry.timestamp[:19] if entry.timestamp else '-' }}</td>
+                    <td class="time-cell">{{ entry.timestamp[:16].replace('T', ' ') if entry.timestamp else '-' }}</td>
                     <td><span class="provider-badge provider-{{ entry.provider }}">{{ entry.provider }}</span></td>
                     <td class="model-cell">{{ entry.model }}</td>
                     <td>{{ entry.operation | replace('_', ' ') }}</td>
-                    <td class="number-cell">{{ entry.prompt_tokens }}</td>
-                    <td class="number-cell">{{ entry.completion_tokens }}</td>
                     <td class="number-cell total-cell">{{ entry.total_tokens }}</td>
                 </tr>
                 {% endfor %}
@@ -93,11 +99,12 @@
         </table>
     </div>
     {% else %}
-    <div class="empty-state">
-        <div class="empty-icon">📊</div>
-        <p>No token usage data yet</p>
-        <p class="empty-hint">Token usage will be tracked when LLM calls are made.</p>
+    <div class="section-content">
+        <div class="empty-state">
+            <div class="empty-icon">📊</div>
+            <p class="empty-title">No token usage data</p>
+            <p class="empty-hint">Token usage will be tracked when LLM calls are made.</p>
+        </div>
     </div>
     {% endif %}
 </div>
-

@@ -542,7 +542,11 @@ async def check_duplicate(text: str, config: BotConfig) -> bool:
 
 ## State Management
 
-### Phase A (JSON)
+The bot uses a dual-storage approach:
+- **JSON state** (`data/state.json`) - Runtime state, counters, queues
+- **SQLite database** (`data/bot.db`) - Historical data, analytics, deduplication
+
+### Phase A: JSON State
 
 MUST:
 - Store state in `data/state.json`
@@ -571,6 +575,213 @@ State structure MUST match:
     "last_post_time": "2025-11-06T10:00:00Z"
 }
 ```
+
+### Phase B: SQLite Database
+
+MUST use `aiosqlite` for async database operations. The database stores historical data for analytics and deduplication.
+
+**Database Location:** `data/bot.db`
+
+**Required Dependency:**
+```python
+aiosqlite>=0.19.0
+```
+
+#### Database Schema
+
+The database has 4 tables:
+
+**1. `read_posts`** - Posts read from timeline (for deduplication)
+```sql
+CREATE TABLE read_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id TEXT UNIQUE NOT NULL,
+    text TEXT NOT NULL,
+    username TEXT,
+    display_name TEXT,
+    post_type TEXT DEFAULT 'text_only',
+    url TEXT,
+    is_interesting INTEGER,
+    read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    post_timestamp TIMESTAMP
+);
+CREATE INDEX idx_read_posts_post_id ON read_posts(post_id);
+```
+
+**2. `written_tweets`** - Bot's posted tweets
+```sql
+CREATE TABLE written_tweets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    tweet_type TEXT DEFAULT 'autonomous',
+    tweet_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT
+);
+CREATE INDEX idx_written_tweets_created_at ON written_tweets(created_at);
+```
+
+**3. `rejected_tweets`** - Tweets that failed validation
+```sql
+CREATE TABLE rejected_tweets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    operation TEXT DEFAULT 'autonomous',
+    rejected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_rejected_tweets_rejected_at ON rejected_tweets(rejected_at);
+```
+
+**4. `token_usage`** - LLM token consumption tracking
+```sql
+CREATE TABLE token_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    prompt_tokens INTEGER DEFAULT 0,
+    completion_tokens INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+    operation TEXT DEFAULT 'generate'
+);
+CREATE INDEX idx_token_usage_timestamp ON token_usage(timestamp);
+CREATE INDEX idx_token_usage_provider ON token_usage(provider);
+```
+
+#### Database Client Implementation
+
+MUST use singleton pattern with async context manager:
+
+```python
+import aiosqlite
+from pathlib import Path
+
+class Database:
+    """Async SQLite database client."""
+    
+    def __init__(self, db_path: str = "data/bot.db"):
+        self.db_path = db_path
+        self._connection: aiosqlite.Connection | None = None
+    
+    async def init(self) -> None:
+        """Initialize database connection and create tables."""
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        self._connection = await aiosqlite.connect(self.db_path)
+        self._connection.row_factory = aiosqlite.Row
+        await self._create_tables()
+    
+    async def close(self) -> None:
+        """Close database connection."""
+        if self._connection:
+            await self._connection.close()
+            self._connection = None
+
+# Global singleton
+_db: Database | None = None
+
+async def get_database(db_path: str = "data/bot.db") -> Database:
+    """Get or create database instance."""
+    global _db
+    if _db is None:
+        _db = Database(db_path)
+        await _db.init()
+    return _db
+
+async def close_database() -> None:
+    """Close the global database instance."""
+    global _db
+    if _db is not None:
+        await _db.close()
+        _db = None
+```
+
+#### Database Usage Examples
+
+**Initialization in main.py:**
+```python
+from src.state.database import get_database, close_database
+
+async def main():
+    # Initialize database
+    db = await get_database()
+    
+    try:
+        # Run bot...
+        pass
+    finally:
+        # Clean shutdown
+        await close_database()
+```
+
+**Storing a read post:**
+```python
+async def store_read_post(self, post: Post) -> None:
+    async with self._get_connection() as conn:
+        await conn.execute(
+            """
+            INSERT OR IGNORE INTO read_posts 
+            (post_id, text, username, display_name, post_type, url, is_interesting, post_timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (post.post_id, post.text, post.username, post.display_name,
+             post.post_type, post.url, 
+             1 if post.is_interesting else (0 if post.is_interesting is False else None),
+             post.timestamp.isoformat() if post.timestamp else None),
+        )
+        await conn.commit()
+```
+
+**Logging token usage:**
+```python
+async def log_token_usage(
+    self,
+    provider: str,
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    operation: str = "generate",
+) -> None:
+    async with self._get_connection() as conn:
+        await conn.execute(
+            """
+            INSERT INTO token_usage 
+            (provider, model, prompt_tokens, completion_tokens, total_tokens, operation)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (provider, model, prompt_tokens, completion_tokens, total_tokens, operation),
+        )
+        await conn.commit()
+```
+
+**Checking for duplicate posts:**
+```python
+async def has_seen_post(self, post_id: str) -> bool:
+    async with self._get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT 1 FROM read_posts WHERE post_id = ? LIMIT 1",
+            (post_id,),
+        )
+        row = await cursor.fetchone()
+        return row is not None
+```
+
+#### Database Best Practices
+
+MUST:
+- Always use `INSERT OR IGNORE` for read_posts to handle duplicates
+- Use parameterized queries to prevent SQL injection
+- Commit transactions after writes
+- Initialize database early in application startup
+- Close database during graceful shutdown
+- Use `aiosqlite.Row` row factory for dict-like access
+
+MUST NOT:
+- Use synchronous sqlite3 library
+- Leave connections open without proper cleanup
+- Skip the commit after write operations
+- Hardcode database path (use config or constants)
 
 ## Scheduling (APScheduler)
 
@@ -880,6 +1091,7 @@ MUST create tests for:
 - LLM integration (mock all provider responses: OpenAI, Google, OpenRouter, Anthropic)
 - Provider fallback logic (test failure scenarios)
 - State management (JSON load/save)
+- Database operations (async SQLite with aiosqlite)
 - Duplicate detection (Chroma similarity)
 - Rate limiting logic
 - Selenium automation (headless mode)
@@ -890,6 +1102,7 @@ tests/
 ├── unit/
 │   ├── test_llm.py
 │   ├── test_state.py
+│   ├── test_database.py
 │   └── test_memory.py
 ├── integration/
 │   ├── test_twitter.py
@@ -904,6 +1117,52 @@ Use pytest fixtures for mocks:
 def mock_openai_client():
     """Mock OpenAI client."""
     # Implementation
+```
+
+### Database Testing
+
+MUST test async database operations using pytest-asyncio:
+
+```python
+import pytest
+import pytest_asyncio
+from src.state.database import Database
+
+@pytest_asyncio.fixture
+async def test_db(tmp_path):
+    """Create a test database in a temporary directory."""
+    db_path = str(tmp_path / "test.db")
+    db = Database(db_path)
+    await db.init()
+    yield db
+    await db.close()
+
+@pytest.mark.asyncio
+async def test_store_and_retrieve_post(test_db):
+    """Test storing and retrieving a post."""
+    from src.state.models import Post
+    
+    post = Post(text="Test post", username="testuser", post_id="123")
+    await test_db.store_read_post(post)
+    
+    assert await test_db.has_seen_post("123") is True
+    assert await test_db.has_seen_post("456") is False
+
+@pytest.mark.asyncio
+async def test_token_usage_logging(test_db):
+    """Test token usage logging and stats."""
+    await test_db.log_token_usage(
+        provider="openai",
+        model="gpt-4o-mini",
+        prompt_tokens=100,
+        completion_tokens=50,
+        total_tokens=150,
+        operation="generate"
+    )
+    
+    stats = await test_db.get_token_usage_stats()
+    assert stats["total_tokens"] == 150
+    assert stats["tokens_by_provider"]["openai"] == 150
 ```
 
 ## Security
@@ -933,6 +1192,9 @@ Before submitting code, verify:
 - [ ] Tests added/updated
 - [ ] No secrets committed
 - [ ] Config structure matches documented schema
+- [ ] Database operations use async/await (aiosqlite)
+- [ ] Token usage logged to database for LLM calls
+- [ ] Read posts stored in database for deduplication
 
 ## Critical Rules Summary
 
@@ -947,6 +1209,10 @@ Before submitting code, verify:
 - Persist cookies between sessions
 - Randomize delays (5-15 seconds)
 - Enforce rate limits from config (default: 5 posts/day, 20 replies/day)
+- Use `aiosqlite` for database operations (async)
+- Log token usage to database for all LLM calls
+- Store read posts in database for deduplication
+- Initialize database at startup, close on shutdown
 
 ### ❌ NEVER DO
 - Post trending topics automatically
@@ -959,6 +1225,8 @@ Before submitting code, verify:
 - Use standard Selenium
 - Skip type hints
 - Hardcode model names, thresholds, or intervals (use config)
+- Use synchronous sqlite3 (use aiosqlite instead)
+- Skip database commits after write operations
 
 ## Development Roadmap
 

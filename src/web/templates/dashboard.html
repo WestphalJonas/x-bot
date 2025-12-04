@@ -5,59 +5,126 @@
 
 {% block header_actions %}
 <button class="btn btn-secondary" hx-get="/" hx-target="body" hx-swap="outerHTML">
-    ↻ Refresh
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-4h2v2h-2zm0-2h2V7h-2z"/>
+    </svg>
+    Refresh
 </button>
 {% endblock %}
 
 {% block content %}
 <div class="dashboard-grid">
-    <!-- Stats Cards -->
+    <!-- Stats Cards - Activity -->
     <div class="stats-row">
-        <div class="stat-card">
-            <div class="stat-icon">📝</div>
-            <div class="stat-content">
-                <div class="stat-value">{{ state.counters.get('posts_today', 0) }}</div>
-                <div class="stat-label">Posts Today</div>
+        <div class="stats-category">
+            <div class="stat-card">
+                <div class="stat-icon">📝</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ state.counters.get('posts_today', 0) }}</div>
+                    <div class="stat-label">Posts Today</div>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">💬</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ state.counters.get('replies_today', 0) }}</div>
+                    <div class="stat-label">Replies Today</div>
+                </div>
             </div>
         </div>
         
-        <div class="stat-card">
-            <div class="stat-icon">💬</div>
-            <div class="stat-content">
-                <div class="stat-value">{{ state.counters.get('replies_today', 0) }}</div>
-                <div class="stat-label">Replies Today</div>
+        <div class="stats-category">
+            <div class="stat-card">
+                <div class="stat-icon">⭐</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ state.interesting_posts_queue | length }}</div>
+                    <div class="stat-label">Interesting</div>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">🔔</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ state.notifications_queue | length }}</div>
+                    <div class="stat-label">Notifications</div>
+                </div>
             </div>
         </div>
         
-        <div class="stat-card">
-            <div class="stat-icon">⭐</div>
-            <div class="stat-content">
-                <div class="stat-value">{{ state.interesting_posts_queue | length }}</div>
-                <div class="stat-label">Interesting Queue</div>
-            </div>
-        </div>
-        
-        <div class="stat-card">
-            <div class="stat-icon">🔔</div>
-            <div class="stat-content">
-                <div class="stat-value">{{ state.notifications_queue | length }}</div>
-                <div class="stat-label">Notifications Queue</div>
+        <div class="stats-category">
+            <div class="stat-card">
+                <div class="stat-icon">⏳</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ job_queue.size }}</div>
+                    <div class="stat-label">Jobs Queued</div>
+                </div>
             </div>
         </div>
     </div>
     
-    <!-- Memory Stats -->
-    {% if memory_stats %}
+    <!-- Bot Status -->
     <div class="section-card">
-        <h2 class="section-title">Memory Statistics</h2>
-        <div class="memory-stats">
-            <div class="memory-stat">
-                <span class="memory-label">Stored Tweets:</span>
-                <span class="memory-value">{{ memory_stats.get('tweets_count', 0) }}</span>
+        <div class="section-header">
+            <h2 class="section-title">Status</h2>
+        </div>
+        <div class="section-content">
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-icon">⏱️</span>
+                    <div class="status-content">
+                        <span class="status-label">Running Since</span>
+                        {% if state.bot_started_at %}
+                        <span class="status-value" id="running-since" data-started="{{ state.bot_started_at.isoformat() }}">
+                            {{ state.bot_started_at.strftime('%b %d, %H:%M UTC') }}
+                        </span>
+                        <span class="status-subtext" id="uptime"></span>
+                        {% else %}
+                        <span class="status-value">Not started</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="status-item">
+                    <span class="status-icon">✅</span>
+                    <div class="status-content">
+                        <span class="status-label">Last Action</span>
+                        {% if state.last_action %}
+                        <span class="status-value">{{ state.last_action }}</span>
+                        <span class="status-subtext">{{ state.last_action_time.strftime('%H:%M:%S') if state.last_action_time else '' }}</span>
+                        {% else %}
+                        <span class="status-value">No actions yet</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="status-item">
+                    <span class="status-icon">📅</span>
+                    <div class="status-content">
+                        <span class="status-label">Next Scheduled</span>
+                        <span class="status-value">~{{ config.scheduler.post_interval_hours }}h post</span>
+                        <span class="status-subtext">{{ config.scheduler.reading_check_minutes }}m read</span>
+                    </div>
+                </div>
             </div>
-            <div class="memory-stat">
-                <span class="memory-label">Read Posts:</span>
-                <span class="memory-value">{{ memory_stats.get('posts_count', 0) }}</span>
+        </div>
+    </div>
+    
+    <!-- Pending Jobs (only show if queue has items) -->
+    {% if not job_queue.is_empty %}
+    <div class="section-card">
+        <div class="section-header">
+            <h2 class="section-title">Pending Jobs</h2>
+        </div>
+        <div class="section-content">
+            <div class="activity-list">
+                {% for job_id in job_queue.pending_jobs %}
+                <div class="activity-item">
+                    <span class="activity-icon">⏳</span>
+                    <span class="activity-text">{{ job_id }}</span>
+                    <span class="activity-value text-accent">waiting</span>
+                </div>
+                {% endfor %}
             </div>
         </div>
     </div>
@@ -65,86 +132,153 @@
     
     <!-- Rate Limits -->
     <div class="section-card">
-        <h2 class="section-title">Rate Limits</h2>
-        <div class="rate-limits">
-            <div class="rate-limit-item">
-                <div class="rate-limit-header">
-                    <span>Posts</span>
-                    <span>{{ state.counters.get('posts_today', 0) }} / {{ config.rate_limits.max_posts_per_day }}</span>
+        <div class="section-header">
+            <h2 class="section-title">Rate Limits</h2>
+        </div>
+        <div class="section-content">
+            <div class="rate-limits">
+                <div class="rate-limit-item">
+                    <div class="rate-limit-header">
+                        <span>Posts</span>
+                        <span>{{ state.counters.get('posts_today', 0) }} / {{ config.rate_limits.max_posts_per_day }}</span>
+                    </div>
+                    <div class="progress-bar">
+                        {% set posts_pct = (state.counters.get('posts_today', 0) / config.rate_limits.max_posts_per_day * 100) | int %}
+                        <div class="progress-fill" style="width: {{ posts_pct }}%"></div>
+                    </div>
                 </div>
-                <div class="progress-bar">
-                    {% set posts_pct = (state.counters.get('posts_today', 0) / config.rate_limits.max_posts_per_day * 100) | int %}
-                    <div class="progress-fill" style="width: {{ posts_pct }}%"></div>
-                </div>
-            </div>
-            
-            <div class="rate-limit-item">
-                <div class="rate-limit-header">
-                    <span>Replies</span>
-                    <span>{{ state.counters.get('replies_today', 0) }} / {{ config.rate_limits.max_replies_per_day }}</span>
-                </div>
-                <div class="progress-bar">
-                    {% set replies_pct = (state.counters.get('replies_today', 0) / config.rate_limits.max_replies_per_day * 100) | int %}
-                    <div class="progress-fill" style="width: {{ replies_pct }}%"></div>
+                
+                <div class="rate-limit-item">
+                    <div class="rate-limit-header">
+                        <span>Replies</span>
+                        <span>{{ state.counters.get('replies_today', 0) }} / {{ config.rate_limits.max_replies_per_day }}</span>
+                    </div>
+                    <div class="progress-bar">
+                        {% set replies_pct = (state.counters.get('replies_today', 0) / config.rate_limits.max_replies_per_day * 100) | int %}
+                        <div class="progress-fill" style="width: {{ replies_pct }}%"></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Last Activity -->
+    <!-- Database Stats -->
+    {% if stats %}
     <div class="section-card">
-        <h2 class="section-title">Recent Activity</h2>
-        <div class="activity-list">
-            {% if state.last_post_time %}
-            <div class="activity-item">
-                <span class="activity-icon">📝</span>
-                <span class="activity-text">Last post:</span>
-                <span class="activity-time">{{ state.last_post_time }}</span>
+        <div class="section-header">
+            <h2 class="section-title">Database</h2>
+        </div>
+        <div class="section-content">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-item-label">Read Posts</span>
+                    <span class="stat-item-value">{{ stats.get('read_posts_count', 0) }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-item-label">Written Tweets</span>
+                    <span class="stat-item-value">{{ stats.get('written_tweets_count', 0) }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-item-label">Rejected</span>
+                    <span class="stat-item-value">{{ stats.get('rejected_tweets_count', 0) }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-item-label">Token Logs</span>
+                    <span class="stat-item-value">{{ stats.get('token_usage_entries', 0) }}</span>
+                </div>
             </div>
-            {% endif %}
-            
-            {% if state.last_notification_check_time %}
-            <div class="activity-item">
-                <span class="activity-icon">🔔</span>
-                <span class="activity-text">Last notification check:</span>
-                <span class="activity-time">{{ state.last_notification_check_time }}</span>
-            </div>
-            {% endif %}
-            
-            <div class="activity-item">
-                <span class="activity-icon">😊</span>
-                <span class="activity-text">Current mood:</span>
-                <span class="activity-value mood-{{ state.mood }}">{{ state.mood | capitalize }}</span>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Recent Activity -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2 class="section-title">Activity</h2>
+        </div>
+        <div class="section-content">
+            <div class="activity-list">
+                {% if state.last_post_time %}
+                <div class="activity-item">
+                    <span class="activity-icon">📝</span>
+                    <span class="activity-text">Last post</span>
+                    <span class="activity-time">{{ state.last_post_time }}</span>
+                </div>
+                {% endif %}
+                
+                {% if state.last_notification_check_time %}
+                <div class="activity-item">
+                    <span class="activity-icon">🔔</span>
+                    <span class="activity-text">Notification check</span>
+                    <span class="activity-time">{{ state.last_notification_check_time }}</span>
+                </div>
+                {% endif %}
+                
+                <div class="activity-item">
+                    <span class="activity-icon">😊</span>
+                    <span class="activity-text">Current mood</span>
+                    <span class="activity-value mood-{{ state.mood }}">{{ state.mood | capitalize }}</span>
+                </div>
             </div>
         </div>
     </div>
     
-    <!-- Configuration Overview -->
+    <!-- Configuration -->
     <div class="section-card">
-        <h2 class="section-title">Configuration</h2>
-        <div class="config-grid">
-            <div class="config-item">
-                <span class="config-label">LLM Provider:</span>
-                <span class="config-value">{{ config.llm.provider }}</span>
-            </div>
-            <div class="config-item">
-                <span class="config-label">Model:</span>
-                <span class="config-value">{{ config.llm.model }}</span>
-            </div>
-            <div class="config-item">
-                <span class="config-label">Personality Tone:</span>
-                <span class="config-value">{{ config.personality.tone | capitalize }}</span>
-            </div>
-            <div class="config-item">
-                <span class="config-label">Topics:</span>
-                <span class="config-value">{{ config.personality.topics | join(', ') }}</span>
-            </div>
-            <div class="config-item">
-                <span class="config-label">Post Interval:</span>
-                <span class="config-value">{{ config.scheduler.post_interval_hours }}h ± {{ config.scheduler.post_jitter_hours }}h</span>
+        <div class="section-header">
+            <h2 class="section-title">Configuration</h2>
+        </div>
+        <div class="section-content">
+            <div class="config-grid">
+                <div class="config-item">
+                    <span class="config-label">Provider</span>
+                    <span class="config-value">{{ config.llm.provider }}</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">Model</span>
+                    <span class="config-value font-mono">{{ config.llm.model }}</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">Tone</span>
+                    <span class="config-value">{{ config.personality.tone | capitalize }}</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">Topics</span>
+                    <span class="config-value">{{ config.personality.topics | join(', ') }}</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">Post Interval</span>
+                    <span class="config-value font-mono">{{ config.scheduler.post_interval_hours }}h ± {{ config.scheduler.post_jitter_hours }}h</span>
+                </div>
             </div>
         </div>
     </div>
 </div>
-{% endblock %}
 
+<script>
+// Calculate and display uptime
+function updateUptime() {
+    const element = document.getElementById('running-since');
+    const uptimeElement = document.getElementById('uptime');
+    if (!element || !uptimeElement) return;
+    
+    const started = new Date(element.dataset.started);
+    const now = new Date();
+    const diff = now - started;
+    
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    let uptimeStr = '';
+    if (days > 0) uptimeStr += `${days}d `;
+    if (hours > 0 || days > 0) uptimeStr += `${hours}h `;
+    uptimeStr += `${minutes}m`;
+    
+    uptimeElement.textContent = uptimeStr + ' uptime';
+}
+
+updateUptime();
+setInterval(updateUptime, 60000);
+</script>
+{% endblock %}
