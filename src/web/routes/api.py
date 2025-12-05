@@ -1,15 +1,18 @@
 """API routes for the X bot dashboard."""
 
+import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from src.core.config import BotConfig
 from src.scheduler.bot_scheduler import get_job_queue
 from src.state.database import get_database
 from src.state.manager import load_state
-from src.web.app import ChromaMemoryDep
+from src.web.app import ChromaMemoryDep, ConfigDep, get_config
 
 if TYPE_CHECKING:
     from src.memory.chroma_client import ChromaMemory
@@ -302,3 +305,81 @@ async def get_job_queue_status() -> JobQueueResponse:
         pending_jobs=pending_jobs,
         is_empty=job_queue.is_empty(),
     )
+
+
+class SettingsUpdateRequest(BaseModel):
+    """Request model for settings update."""
+
+    personality: dict[str, Any] | None = None
+    scheduler: dict[str, Any] | None = None
+    llm: dict[str, Any] | None = None
+    rate_limits: dict[str, Any] | None = None
+    selenium: dict[str, Any] | None = None
+    queue_limits: dict[str, Any] | None = None
+
+
+class SettingsResponse(BaseModel):
+    """Response model for settings."""
+
+    personality: dict[str, Any]
+    scheduler: dict[str, Any]
+    llm: dict[str, Any]
+    rate_limits: dict[str, Any]
+    selenium: dict[str, Any]
+    queue_limits: dict[str, Any]
+
+
+@router.get("/settings", response_model=SettingsResponse)
+async def get_settings(config: ConfigDep) -> SettingsResponse:
+    """Get current bot configuration settings."""
+    config_dict = config.model_dump()
+    return SettingsResponse(
+        personality=config_dict.get("personality", {}),
+        scheduler=config_dict.get("scheduler", {}),
+        llm=config_dict.get("llm", {}),
+        rate_limits=config_dict.get("rate_limits", {}),
+        selenium=config_dict.get("selenium", {}),
+        queue_limits=config_dict.get("queue_limits", {}),
+    )
+
+
+@router.post("/settings")
+async def update_settings(updates: SettingsUpdateRequest) -> dict[str, str]:
+    """Update bot configuration settings.
+
+    Creates a backup of the current config before saving.
+    Clears the config cache to reload the new settings.
+    """
+    config_path = Path("config/config.yaml")
+    backup_path = Path("config/config.yaml.bak")
+
+    try:
+        # Load current config
+        current_config = get_config()
+        current_dict = current_config.model_dump()
+
+        # Create backup
+        if config_path.exists():
+            shutil.copy(config_path, backup_path)
+
+        # Merge updates (only provided sections)
+        updates_dict = updates.model_dump(exclude_none=True)
+        for section, values in updates_dict.items():
+            if section in current_dict and isinstance(values, dict):
+                # Deep merge: update only provided fields
+                current_dict[section].update(values)
+
+        # Validate and save
+        new_config = BotConfig(**current_dict)
+        new_config.save(str(config_path))
+
+        # Clear the config cache so next request gets fresh config
+        get_config.cache_clear()
+
+        return {"status": "ok", "message": "Settings saved successfully"}
+
+    except Exception as e:
+        # Restore backup if save failed
+        if backup_path.exists():
+            shutil.copy(backup_path, config_path)
+        raise HTTPException(status_code=400, detail=f"Failed to save settings: {e}")

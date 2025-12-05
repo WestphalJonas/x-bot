@@ -19,10 +19,10 @@ router = APIRouter()
 
 def to_iso_string(timestamp: datetime | str | None) -> str:
     """Convert datetime object or string to ISO format string.
-    
+
     Args:
         timestamp: datetime object, ISO string, or None
-        
+
     Returns:
         ISO format string or empty string if None
     """
@@ -114,6 +114,20 @@ async def analytics_page(request: Request) -> HTMLResponse:
         "analytics.html",
         {
             "request": request,
+        },
+    )
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request, config: ConfigDep) -> HTMLResponse:
+    """Settings page for editing bot configuration."""
+    templates = request.app.state.templates
+
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "config": config,
         },
     )
 

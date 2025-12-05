@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - X Bot Dashboard{% endblock %}
+
+{% block page_title %}
+    Settings
+{% endblock %}
+
+{% block header_actions %}
+    <button class="btn btn-primary" id="save-all-btn" onclick="saveAllSettings()">
+        Save All
+    </button>
+{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <!-- Save Status Toast -->
+    <div id="save-toast" class="toast hidden">
+        <span class="toast-icon">✓</span>
+        <span class="toast-message">Settings saved</span>
+    </div>
+
+    <!-- Personality Section -->
+    <section class="settings-section">
+        <div class="section-header">
+            <h2 class="section-title">🎭 Personality</h2>
+            <p class="section-description">Configure the bot's voice and content style</p>
+        </div>
+        <div class="settings-form" id="personality-form">
+            <div class="form-group">
+                <label class="form-label" for="tone">Tone</label>
+                <select class="form-select" id="tone" name="tone">
+                    <option value="professional" {% if config.personality.tone == 'professional' %}selected{% endif %}>Professional</option>
+                    <option value="casual" {% if config.personality.tone == 'casual' %}selected{% endif %}>Casual</option>
+                    <option value="humorous" {% if config.personality.tone == 'humorous' %}selected{% endif %}>Humorous</option>
+                    <option value="technical" {% if config.personality.tone == 'technical' %}selected{% endif %}>Technical</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="style">Style</label>
+                <select class="form-select" id="style" name="style">
+                    <option value="concise" {% if config.personality.style == 'concise' %}selected{% endif %}>Concise</option>
+                    <option value="detailed" {% if config.personality.style == 'detailed' %}selected{% endif %}>Detailed</option>
+                    <option value="conversational" {% if config.personality.style == 'conversational' %}selected{% endif %}>Conversational</option>
+                    <option value="cryptic" {% if config.personality.style == 'cryptic' %}selected{% endif %}>Cryptic</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="topics">Topics</label>
+                <div class="tag-input-container" id="topics-container">
+                    <div class="tags-list" id="topics-tags">
+                        {% for topic in config.personality.topics %}
+                        <span class="tag" data-value="{{ topic }}">
+                            {{ topic }}
+                            <button type="button" class="tag-remove" onclick="removeTag('topics', '{{ topic }}')">&times;</button>
+                        </span>
+                        {% endfor %}
+                    </div>
+                    <input type="text" class="tag-input" id="topics-input" placeholder="Add topic..." onkeydown="handleTagInput(event, 'topics')">
+                </div>
+                <p class="form-hint">Press Enter to add a topic</p>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="min_tweet_length">Min Tweet Length</label>
+                    <input type="number" class="form-input" id="min_tweet_length" name="min_tweet_length" 
+                           value="{{ config.personality.min_tweet_length }}" min="1" max="280">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="max_tweet_length">Max Tweet Length</label>
+                    <input type="number" class="form-input" id="max_tweet_length" name="max_tweet_length" 
+                           value="{{ config.personality.max_tweet_length }}" min="1" max="280">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Scheduler Section -->
+    <section class="settings-section">
+        <div class="section-header">
+            <h2 class="section-title">⏰ Scheduler</h2>
+            <p class="section-description">Configure posting intervals and timing</p>
+        </div>
+        <div class="settings-form" id="scheduler-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="post_interval_hours">Post Interval (hours)</label>
+                    <input type="number" class="form-input" id="post_interval_hours" name="post_interval_hours" 
+                           value="{{ config.scheduler.post_interval_hours }}" min="0.1" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="post_jitter_hours">Post Jitter (hours)</label>
+                    <input type="number" class="form-input" id="post_jitter_hours" name="post_jitter_hours" 
+                           value="{{ config.scheduler.post_jitter_hours }}" min="0" step="0.1">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="reading_check_minutes">Reading Interval (min)</label>
+                    <input type="number" class="form-input" id="reading_check_minutes" name="reading_check_minutes" 
+                           value="{{ config.scheduler.reading_check_minutes }}" min="1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="mention_check_minutes">Mention Check (min)</label>
+                    <input type="number" class="form-input" id="mention_check_minutes" name="mention_check_minutes" 
+                           value="{{ config.scheduler.mention_check_minutes }}" min="1">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="inspiration_check_minutes">Inspiration Check (min)</label>
+                    <input type="number" class="form-input" id="inspiration_check_minutes" name="inspiration_check_minutes" 
+                           value="{{ config.scheduler.inspiration_check_minutes }}" min="1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="inspiration_batch_size">Inspiration Batch Size</label>
+                    <input type="number" class="form-input" id="inspiration_batch_size" name="inspiration_batch_size" 
+                           value="{{ config.scheduler.inspiration_batch_size }}" min="1">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- LLM Section -->
+    <section class="settings-section">
+        <div class="section-header">
+            <h2 class="section-title">🤖 LLM</h2>
+            <p class="section-description">Configure AI model and generation settings</p>
+        </div>
+        <div class="settings-form" id="llm-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="provider">Provider</label>
+                    <select class="form-select" id="provider" name="provider">
+                        <option value="openai" {% if config.llm.provider == 'openai' %}selected{% endif %}>OpenAI</option>
+                        <option value="google" {% if config.llm.provider == 'google' %}selected{% endif %}>Google</option>
+                        <option value="openrouter" {% if config.llm.provider == 'openrouter' %}selected{% endif %}>OpenRouter</option>
+                        <option value="anthropic" {% if config.llm.provider == 'anthropic' %}selected{% endif %}>Anthropic</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="model">Model</label>
+                    <input type="text" class="form-input" id="model" name="model" 
+                           value="{{ config.llm.model }}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="max_tokens">Max Tokens</label>
+                    <input type="number" class="form-input" id="max_tokens" name="max_tokens" 
+                           value="{{ config.llm.max_tokens }}" min="50" max="1000">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="temperature">Temperature</label>
+                    <div class="range-input-container">
+                        <input type="range" class="form-range" id="temperature" name="temperature" 
+                               value="{{ config.llm.temperature }}" min="0" max="2" step="0.1"
+                               oninput="updateRangeValue(this)">
+                        <span class="range-value" id="temperature-value">{{ config.llm.temperature }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="embedding_provider">Embedding Provider</label>
+                    <select class="form-select" id="embedding_provider" name="embedding_provider">
+                        <option value="openai" {% if config.llm.embedding_provider == 'openai' %}selected{% endif %}>OpenAI</option>
+                        <option value="google" {% if config.llm.embedding_provider == 'google' %}selected{% endif %}>Google</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="similarity_threshold">Similarity Threshold</label>
+                    <div class="range-input-container">
+                        <input type="range" class="form-range" id="similarity_threshold" name="similarity_threshold" 
+                               value="{{ config.llm.similarity_threshold }}" min="0" max="1" step="0.05"
+                               oninput="updateRangeValue(this)">
+                        <span class="range-value" id="similarity_threshold-value">{{ config.llm.similarity_threshold }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Rate Limits Section -->
+    <section class="settings-section">
+        <div class="section-header">
+            <h2 class="section-title">🚦 Rate Limits</h2>
+            <p class="section-description">Configure daily posting limits</p>
+        </div>
+        <div class="settings-form" id="rate-limits-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="max_posts_per_day">Max Posts/Day</label>
+                    <input type="number" class="form-input" id="max_posts_per_day" name="max_posts_per_day" 
+                           value="{{ config.rate_limits.max_posts_per_day }}" min="1" max="50">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="max_replies_per_day">Max Replies/Day</label>
+                    <input type="number" class="form-input" id="max_replies_per_day" name="max_replies_per_day" 
+                           value="{{ config.rate_limits.max_replies_per_day }}" min="1" max="100">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Selenium Section -->
+    <section class="settings-section">
+        <div class="section-header">
+            <h2 class="section-title">🌐 Browser</h2>
+            <p class="section-description">Configure browser automation settings</p>
+        </div>
+        <div class="settings-form" id="selenium-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="min_delay_seconds">Min Delay (sec)</label>
+                    <input type="number" class="form-input" id="min_delay_seconds" name="min_delay_seconds" 
+                           value="{{ config.selenium.min_delay_seconds }}" min="0.5" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="max_delay_seconds">Max Delay (sec)</label>
+                    <input type="number" class="form-input" id="max_delay_seconds" name="max_delay_seconds" 
+                           value="{{ config.selenium.max_delay_seconds }}" min="1" step="0.5">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label toggle-label">
+                        <input type="checkbox" class="form-checkbox" id="headless" name="headless" 
+                               {% if config.selenium.headless %}checked{% endif %}>
+                        <span class="toggle-switch"></span>
+                        <span>Headless Mode</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label toggle-label">
+                        <input type="checkbox" class="form-checkbox" id="user_agent_rotation" name="user_agent_rotation" 
+                               {% if config.selenium.user_agent_rotation %}checked{% endif %}>
+                        <span class="toggle-switch"></span>
+                        <span>User-Agent Rotation</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Topics tag management
+    let topics = {{ config.personality.topics | tojson }};
+
+    function addTag(field, value) {
+        value = value.trim();
+        if (!value) return;
+        
+        if (field === 'topics') {
+            if (topics.includes(value)) return;
+            topics.push(value);
+            renderTags('topics', topics);
+        }
+    }
+
+    function removeTag(field, value) {
+        if (field === 'topics') {
+            topics = topics.filter(t => t !== value);
+            renderTags('topics', topics);
+        }
+    }
+
+    function renderTags(field, values) {
+        const container = document.getElementById(field + '-tags');
+        container.innerHTML = values.map(v => `
+            <span class="tag" data-value="${v}">
+                ${v}
+                <button type="button" class="tag-remove" onclick="removeTag('${field}', '${v}')">&times;</button>
+            </span>
+        `).join('');
+    }
+
+    function handleTagInput(event, field) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const input = event.target;
+            addTag(field, input.value);
+            input.value = '';
+        }
+    }
+
+    // Range input value display
+    function updateRangeValue(input) {
+        const valueSpan = document.getElementById(input.id + '-value');
+        if (valueSpan) {
+            valueSpan.textContent = input.value;
+        }
+    }
+
+    // Toast notifications
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('save-toast');
+        const msgSpan = toast.querySelector('.toast-message');
+        const iconSpan = toast.querySelector('.toast-icon');
+        
+        msgSpan.textContent = message;
+        iconSpan.textContent = isError ? '✗' : '✓';
+        toast.classList.toggle('toast-error', isError);
+        toast.classList.remove('hidden');
+        
+        setTimeout(() => {
+            toast.classList.add('hidden');
+        }, 3000);
+    }
+
+    // Collect all settings
+    function collectSettings() {
+        return {
+            personality: {
+                tone: document.getElementById('tone').value,
+                style: document.getElementById('style').value,
+                topics: topics,
+                min_tweet_length: parseInt(document.getElementById('min_tweet_length').value),
+                max_tweet_length: parseInt(document.getElementById('max_tweet_length').value),
+            },
+            scheduler: {
+                post_interval_hours: parseFloat(document.getElementById('post_interval_hours').value),
+                post_jitter_hours: parseFloat(document.getElementById('post_jitter_hours').value),
+                reading_check_minutes: parseInt(document.getElementById('reading_check_minutes').value),
+                mention_check_minutes: parseInt(document.getElementById('mention_check_minutes').value),
+                inspiration_check_minutes: parseInt(document.getElementById('inspiration_check_minutes').value),
+                inspiration_batch_size: parseInt(document.getElementById('inspiration_batch_size').value),
+            },
+            llm: {
+                provider: document.getElementById('provider').value,
+                model: document.getElementById('model').value,
+                max_tokens: parseInt(document.getElementById('max_tokens').value),
+                temperature: parseFloat(document.getElementById('temperature').value),
+                embedding_provider: document.getElementById('embedding_provider').value,
+                similarity_threshold: parseFloat(document.getElementById('similarity_threshold').value),
+            },
+            rate_limits: {
+                max_posts_per_day: parseInt(document.getElementById('max_posts_per_day').value),
+                max_replies_per_day: parseInt(document.getElementById('max_replies_per_day').value),
+            },
+            selenium: {
+                min_delay_seconds: parseFloat(document.getElementById('min_delay_seconds').value),
+                max_delay_seconds: parseFloat(document.getElementById('max_delay_seconds').value),
+                headless: document.getElementById('headless').checked,
+                user_agent_rotation: document.getElementById('user_agent_rotation').checked,
+            },
+        };
+    }
+
+    // Save all settings
+    async function saveAllSettings() {
+        const btn = document.getElementById('save-all-btn');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+        
+        try {
+            const settings = collectSettings();
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings),
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                showToast('Settings saved successfully');
+            } else {
+                showToast(result.detail || 'Failed to save settings', true);
+            }
+        } catch (error) {
+            showToast('Error saving settings: ' + error.message, true);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Save All';
+        }
+    }
+</script>
+{% endblock %}
+
