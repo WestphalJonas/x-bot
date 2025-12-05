@@ -18,23 +18,35 @@ router = APIRouter()
 
 
 def to_iso_string(timestamp: datetime | str | None) -> str:
-    """Convert datetime object or string to ISO format string.
+    """Convert datetime object or string to ISO format string with UTC timezone.
 
     Args:
         timestamp: datetime object, ISO string, or None
 
     Returns:
-        ISO format string or empty string if None
+        ISO format string with timezone or empty string if None
     """
     if timestamp is None:
         return ""
     if isinstance(timestamp, datetime):
+        # If naive datetime, assume UTC
+        if timestamp.tzinfo is None:
+            return timestamp.isoformat() + "Z"
         return timestamp.isoformat()
     if isinstance(timestamp, str):
-        # If already a string, try to parse and return ISO format
+        # If already a string, ensure it has timezone info
         try:
-            dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-            return dt.isoformat()
+            # Handle SQLite format "YYYY-MM-DD HH:MM:SS"
+            if " " in timestamp and "T" not in timestamp:
+                timestamp = timestamp.replace(" ", "T")
+            # If no timezone indicator, add Z (assume UTC)
+            if (
+                not timestamp.endswith("Z")
+                and "+" not in timestamp
+                and "-" not in timestamp[-6:]
+            ):
+                return timestamp + "Z"
+            return timestamp
         except (ValueError, AttributeError):
             return timestamp
     return str(timestamp)
