@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 
 from src.core.config import BotConfig, EnvSettings
+from src.core.evaluation import re_evaluate_tweet
 from src.core.llm import LLMClient
 from src.state.manager import load_state, save_state
 from src.state.models import Post
@@ -222,6 +223,34 @@ async def _process_inspiration_queue_async(
                 raise ValueError(
                     f"Inspiration tweet validation failed after {max_attempts} attempts: {error_message}"
                 )
+
+        # Final LLM gatekeeper check
+        approved, evaluation_reason = await re_evaluate_tweet(
+            tweet_text=tweet_text,
+            config=config,
+            llm_client=llm_client,
+            operation="inspiration",
+        )
+        if not approved:
+            logger.error(
+                "inspiration_re_evaluation_failed",
+                extra={"reason": evaluation_reason},
+            )
+            try:
+                await log_rejected_tweet(
+                    text=tweet_text,
+                    reason=evaluation_reason,
+                    operation="inspiration",
+                )
+            except Exception as save_error:
+                logger.error(
+                    "failed_to_save_rejected_tweet",
+                    extra={"error": str(save_error)},
+                    exc_info=True,
+                )
+            raise ValueError(
+                f"Inspiration tweet re-evaluation failed: {evaluation_reason}"
+            )
 
         # Use session manager for browser operations
         async with AsyncTwitterSession(

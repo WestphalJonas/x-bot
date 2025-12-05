@@ -595,12 +595,7 @@ class LLMClient:
         return tweet
 
     async def validate_tweet(self, tweet: str) -> tuple[bool, str]:
-        """Validate tweet quality and brand alignment.
-
-        Checks:
-        - Length (min/max from config)
-        - Basic quality (not empty, reasonable content)
-        - On-brand check (matches personality)
+        """Deterministic validation (length/empty) before LLM re-evaluation.
 
         Args:
             tweet: Tweet text to validate
@@ -622,20 +617,6 @@ class LLMClient:
         # Basic quality checks
         if not tweet.strip():
             return False, "Tweet is empty"
-
-        # On-brand check using LLM
-        # TODO: Implement at 10. src/core/evaluation.py
-        try:
-            is_on_brand = await self._check_brand_alignment(tweet)
-            if not is_on_brand:
-                return False, "Tweet does not align with brand personality"
-        except Exception as e:
-            logger.warning(
-                "brand_check_failed",
-                extra={"error": str(e), "tweet": tweet[:50]},
-            )
-            # Don't fail validation if brand check fails, just log warning
-            pass
 
         return True, ""
 

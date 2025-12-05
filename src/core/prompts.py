@@ -53,6 +53,26 @@ If ANY criterion fails, respond "NO".
 
 Respond with only YES or NO."""
 
+RE_EVALUATION_PROMPT = """Final gatekeeper check for posting this tweet.
+
+Personality:
+- Tone: {tone}
+- Style: {style}
+- Topics: {topics}
+
+Tweet:
+"{tweet}"
+
+Check:
+1) Relevance to topics
+2) Tone/style alignment
+3) Clarity and specificity (no vague hype)
+4) Policy: no hashtags, no clickbait, no generic AI buzzwords
+5) Safety/compliance: no hate/harassment/toxicity
+
+Return ONLY strict JSON (no code fences, no prose):
+{{"approve": true|false, "reason": "short reason"}}"""
+
 INSPIRATION_TWEET_PROMPT = """Here are posts I found interesting:
 
 {posts_context}

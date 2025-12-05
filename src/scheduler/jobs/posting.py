@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from openai import AuthenticationError, RateLimitError
 
 from src.core.config import BotConfig, EnvSettings
+from src.core.evaluation import re_evaluate_tweet
 from src.core.llm import LLMClient
 from src.state.manager import load_state, save_state
 from src.web.data_tracker import log_action, log_rejected_tweet, log_written_tweet
@@ -170,7 +171,7 @@ async def _post_autonomous_tweet_async(
             )
             # Continue without duplicate check if ChromaDB fails
 
-    # Validate tweet
+    # Validate tweet (basic)
     is_valid, error_message = await llm_client.validate_tweet(tweet_text)
     if not is_valid:
         logger.error("tweet_validation_failed", extra={"error": error_message})
@@ -190,7 +191,35 @@ async def _post_autonomous_tweet_async(
             )
         raise ValueError(f"Tweet validation failed: {error_message}")
 
-    logger.info("tweet_validated", extra={"length": len(tweet_text)})
+    # Final LLM gatekeeper check
+    approved, evaluation_reason = await re_evaluate_tweet(
+        tweet_text=tweet_text,
+        config=config,
+        llm_client=llm_client,
+        operation="autonomous",
+    )
+    if not approved:
+        logger.error(
+            "tweet_re_evaluation_failed", extra={"reason": evaluation_reason}
+        )
+        try:
+            await log_rejected_tweet(
+                text=tweet_text,
+                reason=evaluation_reason,
+                operation="autonomous",
+            )
+        except Exception as save_error:
+            logger.error(
+                "failed_to_save_rejected_tweet",
+                extra={"error": str(save_error)},
+                exc_info=True,
+            )
+        raise ValueError(f"Tweet re-evaluation failed: {evaluation_reason}")
+
+    logger.info(
+        "tweet_validated",
+        extra={"length": len(tweet_text), "approved": approved},
+    )
 
     # Use session manager for browser operations
     try:
