@@ -1,7 +1,7 @@
 """HTML view routes for the X bot dashboard."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -136,16 +136,21 @@ async def settings_page(request: Request, config: ConfigDep) -> HTMLResponse:
 
 
 @router.get("/partials/posts/read", response_class=HTMLResponse)
-async def posts_read_partial(request: Request) -> HTMLResponse:
+async def posts_read_partial(request: Request, page: int = 1) -> HTMLResponse:
     """Partial for read posts list (HTMX)."""
     templates = request.app.state.templates
 
     posts = []
     total = 0
 
+    # Pagination settings
+    per_page = 20
+    page = max(1, page)
+    offset = (page - 1) * per_page
+
     try:
         db = await get_database()
-        posts_data = await db.get_read_posts(limit=50)
+        posts_data = await db.get_read_posts(limit=per_page, offset=offset)
         total = await db.get_read_posts_count()
 
         for post in posts_data:
@@ -167,6 +172,11 @@ async def posts_read_partial(request: Request) -> HTMLResponse:
     except Exception:
         pass
 
+    # Calculate pagination info
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    has_prev = page > 1
+    has_next = page < total_pages
+
     return templates.TemplateResponse(
         "partials/posts_list.html",
         {
@@ -174,21 +184,32 @@ async def posts_read_partial(request: Request) -> HTMLResponse:
             "posts": posts,
             "total": total,
             "post_type": "read",
+            # Pagination
+            "page": page,
+            "total_pages": total_pages,
+            "has_prev": has_prev,
+            "has_next": has_next,
+            "base_url": "/partials/posts/read",
         },
     )
 
 
 @router.get("/partials/posts/written", response_class=HTMLResponse)
-async def posts_written_partial(request: Request) -> HTMLResponse:
+async def posts_written_partial(request: Request, page: int = 1) -> HTMLResponse:
     """Partial for written tweets list (HTMX)."""
     templates = request.app.state.templates
 
     tweets = []
     total = 0
 
+    # Pagination settings
+    per_page = 20
+    page = max(1, page)
+    offset = (page - 1) * per_page
+
     try:
         db = await get_database()
-        tweets_data = await db.get_written_tweets(limit=50)
+        tweets_data = await db.get_written_tweets(limit=per_page, offset=offset)
         total = await db.get_written_tweets_count()
 
         for tweet in tweets_data:
@@ -202,6 +223,11 @@ async def posts_written_partial(request: Request) -> HTMLResponse:
     except Exception:
         pass
 
+    # Calculate pagination info
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    has_prev = page > 1
+    has_next = page < total_pages
+
     return templates.TemplateResponse(
         "partials/tweets_list.html",
         {
@@ -209,21 +235,32 @@ async def posts_written_partial(request: Request) -> HTMLResponse:
             "tweets": tweets,
             "total": total,
             "tweet_type": "written",
+            # Pagination
+            "page": page,
+            "total_pages": total_pages,
+            "has_prev": has_prev,
+            "has_next": has_next,
+            "base_url": "/partials/posts/written",
         },
     )
 
 
 @router.get("/partials/posts/rejected", response_class=HTMLResponse)
-async def posts_rejected_partial(request: Request) -> HTMLResponse:
+async def posts_rejected_partial(request: Request, page: int = 1) -> HTMLResponse:
     """Partial for rejected tweets list (HTMX)."""
     templates = request.app.state.templates
 
     tweets = []
     total = 0
 
+    # Pagination settings
+    per_page = 20
+    page = max(1, page)
+    offset = (page - 1) * per_page
+
     try:
         db = await get_database()
-        tweets_data = await db.get_rejected_tweets(limit=50)
+        tweets_data = await db.get_rejected_tweets(limit=per_page, offset=offset)
         total = await db.get_rejected_tweets_count()
 
         for tweet in tweets_data:
@@ -238,30 +275,49 @@ async def posts_rejected_partial(request: Request) -> HTMLResponse:
     except Exception:
         pass
 
+    # Calculate pagination info
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    has_prev = page > 1
+    has_next = page < total_pages
+
     return templates.TemplateResponse(
         "partials/rejected_list.html",
         {
             "request": request,
             "tweets": tweets,
             "total": total,
+            # Pagination
+            "page": page,
+            "total_pages": total_pages,
+            "has_prev": has_prev,
+            "has_next": has_next,
+            "base_url": "/partials/posts/rejected",
         },
     )
 
 
 @router.get("/partials/posts/interested", response_class=HTMLResponse)
-async def posts_interested_partial(request: Request) -> HTMLResponse:
+async def posts_interested_partial(request: Request, page: int = 1) -> HTMLResponse:
     """Partial for interested posts list (HTMX)."""
     templates = request.app.state.templates
 
     posts = []
     total = 0
 
+    # Pagination settings
+    per_page = 20
+    page = max(1, page)
+    offset = (page - 1) * per_page
+
     try:
         state = await load_state()
         queue = state.interesting_posts_queue
 
         total = len(queue)
-        for post_data in queue:
+        # Slice the queue for pagination
+        page_items = queue[offset : offset + per_page]
+
+        for post_data in page_items:
             posts.append(
                 {
                     "id": post_data.get("post_id", ""),
@@ -281,19 +337,38 @@ async def posts_interested_partial(request: Request) -> HTMLResponse:
     except Exception:
         pass
 
+    # Calculate pagination info
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    has_prev = page > 1
+    has_next = page < total_pages
+
     return templates.TemplateResponse(
         "partials/interested_list.html",
         {
             "request": request,
             "posts": posts,
             "total": total,
+            # Pagination
+            "page": page,
+            "total_pages": total_pages,
+            "has_prev": has_prev,
+            "has_next": has_next,
+            "base_url": "/partials/posts/interested",
         },
     )
 
 
 @router.get("/partials/analytics/tokens", response_class=HTMLResponse)
-async def analytics_tokens_partial(request: Request) -> HTMLResponse:
-    """Partial for token usage analytics (HTMX)."""
+async def analytics_tokens_partial(
+    request: Request,
+    page: int = 1,
+) -> HTMLResponse:
+    """Partial for token usage analytics (HTMX).
+
+    Args:
+        request: FastAPI request object
+        page: Page number (1-indexed)
+    """
     templates = request.app.state.templates
 
     entries = []
@@ -301,10 +376,16 @@ async def analytics_tokens_partial(request: Request) -> HTMLResponse:
     tokens_by_provider: dict[str, int] = {}
     tokens_by_operation: dict[str, int] = {}
     total_entries = 0
+    hourly_data: list[dict[str, Any]] = []
+
+    # Pagination settings
+    per_page = 20
+    page = max(1, page)  # Ensure page is at least 1
+    offset = (page - 1) * per_page
 
     try:
         db = await get_database()
-        entries_data = await db.get_token_usage(limit=100)
+        entries_data = await db.get_token_usage(limit=per_page, offset=offset)
         stats = await db.get_token_usage_stats()
 
         total_tokens = stats.get("total_tokens", 0)
@@ -324,8 +405,17 @@ async def analytics_tokens_partial(request: Request) -> HTMLResponse:
                     "operation": entry.get("operation", "unknown"),
                 }
             )
+
+        # Get hourly data for the chart (last 24 hours)
+        hourly_raw = await db.get_hourly_token_usage(hours=24)
+        hourly_data = [{"hour": h["hour"], "tokens": h["tokens"]} for h in hourly_raw]
     except Exception:
         pass
+
+    # Calculate pagination info
+    total_pages = max(1, (total_entries + per_page - 1) // per_page)
+    has_prev = page > 1
+    has_next = page < total_pages
 
     return templates.TemplateResponse(
         "partials/token_analytics.html",
@@ -336,5 +426,12 @@ async def analytics_tokens_partial(request: Request) -> HTMLResponse:
             "total_tokens": total_tokens,
             "tokens_by_provider": tokens_by_provider,
             "tokens_by_operation": tokens_by_operation,
+            "hourly_data": hourly_data,
+            # Pagination
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages,
+            "has_prev": has_prev,
+            "has_next": has_next,
         },
     )

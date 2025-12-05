@@ -3,6 +3,11 @@
 {% block title %}Analytics - X Bot{% endblock %}
 {% block page_title %}Analytics{% endblock %}
 
+{% block head %}
+<!-- Chart.js - preload for analytics -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block header_actions %}
 <button class="btn btn-secondary" hx-get="/partials/analytics/tokens" hx-target="#analytics-content" hx-swap="innerHTML">
     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">

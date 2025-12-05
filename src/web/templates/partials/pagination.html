@@ -1,0 +1,36 @@
+{% if total_pages > 1 %}
+<div class="pagination">
+    <button class="pagination-btn" 
+            {% if has_prev %}
+            hx-get="{{ base_url }}?page={{ page - 1 }}"
+            hx-target="#posts-content"
+            hx-swap="innerHTML"
+            {% else %}
+            disabled
+            {% endif %}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+        </svg>
+        Prev
+    </button>
+    
+    <span class="pagination-info">
+        Page {{ page }} of {{ total_pages }}
+    </span>
+    
+    <button class="pagination-btn"
+            {% if has_next %}
+            hx-get="{{ base_url }}?page={{ page + 1 }}"
+            hx-target="#posts-content"
+            hx-swap="innerHTML"
+            {% else %}
+            disabled
+            {% endif %}>
+        Next
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
+        </svg>
+    </button>
+</div>
+{% endif %}
+

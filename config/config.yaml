@@ -14,17 +14,15 @@ personality:
   max_tweet_length: 280
   min_tweet_length: 60
   style: cryptic
-  tone: professional
+  tone: humorous
   topics:
   - AI
   - technology
   - crypto
   - blockchain
   - web3
-  - defi
-  - nft
-  - metaverse
   - gaming
+  - memes
 rate_limits:
   max_posts_per_day: 10
   max_replies_per_day: 50

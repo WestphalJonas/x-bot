@@ -168,7 +168,9 @@ class Database:
                         post.display_name,
                         post.post_type,
                         post.url,
-                        1 if post.is_interesting else (0 if post.is_interesting is False else None),
+                        1
+                        if post.is_interesting
+                        else (0 if post.is_interesting is False else None),
                         post.timestamp.isoformat() if post.timestamp else None,
                     ),
                 )
@@ -184,11 +186,14 @@ class Database:
                 )
                 raise
 
-    async def get_read_posts(self, limit: int = 50) -> list[dict[str, Any]]:
-        """Get recent read posts.
+    async def get_read_posts(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Get recent read posts with pagination.
 
         Args:
             limit: Maximum number of posts to return
+            offset: Number of posts to skip (for pagination)
 
         Returns:
             List of post dictionaries
@@ -200,9 +205,9 @@ class Database:
                        is_interesting, read_at, post_timestamp
                 FROM read_posts
                 ORDER BY read_at DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (limit,),
+                (limit, offset),
             )
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
@@ -250,11 +255,14 @@ class Database:
                 extra={"tweet_type": tweet_type, "length": len(text)},
             )
 
-    async def get_written_tweets(self, limit: int = 50) -> list[dict[str, Any]]:
-        """Get recent written tweets.
+    async def get_written_tweets(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Get recent written tweets with pagination.
 
         Args:
             limit: Maximum number of tweets to return
+            offset: Number of tweets to skip (for pagination)
 
         Returns:
             List of tweet dictionaries
@@ -265,9 +273,9 @@ class Database:
                 SELECT text, tweet_type, tweet_id, created_at, metadata
                 FROM written_tweets
                 ORDER BY created_at DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (limit,),
+                (limit, offset),
             )
             rows = await cursor.fetchall()
             result = []
@@ -314,11 +322,14 @@ class Database:
                 extra={"operation": operation, "reason": reason[:50]},
             )
 
-    async def get_rejected_tweets(self, limit: int = 50) -> list[dict[str, Any]]:
-        """Get recent rejected tweets.
+    async def get_rejected_tweets(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Get recent rejected tweets with pagination.
 
         Args:
             limit: Maximum number of tweets to return
+            offset: Number of tweets to skip (for pagination)
 
         Returns:
             List of rejected tweet dictionaries
@@ -329,9 +340,9 @@ class Database:
                 SELECT text, reason, operation, rejected_at
                 FROM rejected_tweets
                 ORDER BY rejected_at DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (limit,),
+                (limit, offset),
             )
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
@@ -371,7 +382,14 @@ class Database:
                 (provider, model, prompt_tokens, completion_tokens, total_tokens, operation)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (provider, model, prompt_tokens, completion_tokens, total_tokens, operation),
+                (
+                    provider,
+                    model,
+                    prompt_tokens,
+                    completion_tokens,
+                    total_tokens,
+                    operation,
+                ),
             )
             await conn.commit()
             logger.info(
@@ -384,11 +402,14 @@ class Database:
                 },
             )
 
-    async def get_token_usage(self, limit: int = 100) -> list[dict[str, Any]]:
-        """Get recent token usage entries.
+    async def get_token_usage(
+        self, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Get recent token usage entries with pagination.
 
         Args:
             limit: Maximum number of entries to return
+            offset: Number of entries to skip (for pagination)
 
         Returns:
             List of token usage dictionaries
@@ -400,9 +421,9 @@ class Database:
                        completion_tokens, total_tokens, operation
                 FROM token_usage
                 ORDER BY timestamp DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (limit,),
+                (limit, offset),
             )
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
@@ -455,6 +476,31 @@ class Database:
                 "tokens_by_operation": tokens_by_operation,
             }
 
+    async def get_hourly_token_usage(self, hours: int = 24) -> list[dict[str, Any]]:
+        """Get token usage aggregated by hour for the last N hours.
+
+        Args:
+            hours: Number of hours to look back (default 24)
+
+        Returns:
+            List of dicts with hour and token count
+        """
+        async with self._get_connection() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT 
+                    strftime('%Y-%m-%d %H:00:00', timestamp) as hour,
+                    SUM(total_tokens) as tokens
+                FROM token_usage
+                WHERE timestamp >= datetime('now', ? || ' hours')
+                GROUP BY strftime('%Y-%m-%d %H', timestamp)
+                ORDER BY hour ASC
+                """,
+                (f"-{hours}",),
+            )
+            rows = await cursor.fetchall()
+            return [{"hour": row["hour"], "tokens": row["tokens"]} for row in rows]
+
     # ===== General Stats =====
 
     async def get_stats(self) -> dict[str, int]:
@@ -467,7 +513,9 @@ class Database:
             "read_posts_count": await self.get_read_posts_count(),
             "written_tweets_count": await self.get_written_tweets_count(),
             "rejected_tweets_count": await self.get_rejected_tweets_count(),
-            "token_usage_entries": (await self.get_token_usage_stats())["total_entries"],
+            "token_usage_entries": (await self.get_token_usage_stats())[
+                "total_entries"
+            ],
         }
 
 
@@ -497,4 +545,3 @@ async def close_database() -> None:
     if _db is not None:
         await _db.close()
         _db = None
-

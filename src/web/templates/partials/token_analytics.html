@@ -17,6 +17,146 @@
     </div>
 </div>
 
+<!-- Hourly Usage Chart (Last 24h) -->
+<div class="analytics-section">
+    <div class="section-header">
+        <h3 class="section-title">Last 24 Hours</h3>
+    </div>
+    <div class="section-content">
+        {% if hourly_data %}
+        <div class="chart-container">
+            <canvas id="hourlyTokenChart"></canvas>
+        </div>
+        <script id="hourlyChartData" type="application/json">{{ hourly_data | tojson }}</script>
+        <script>
+            (function initHourlyChart() {
+                // Wait for Chart.js to be available
+                if (typeof Chart === 'undefined') {
+                    setTimeout(initHourlyChart, 50);
+                    return;
+                }
+                
+                const dataEl = document.getElementById('hourlyChartData');
+                const canvas = document.getElementById('hourlyTokenChart');
+                if (!dataEl || !canvas) return;
+                
+                const rawData = JSON.parse(dataEl.textContent);
+                const ctx = canvas.getContext('2d');
+                
+                // Get theme colors from CSS variables
+                const style = getComputedStyle(document.documentElement);
+                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                const accentBlue = style.getPropertyValue('--accent-blue').trim() || '#1d9bf0';
+                const textSecondary = style.getPropertyValue('--text-secondary').trim() || '#71767b';
+                const borderColor = style.getPropertyValue('--border-color').trim() || '#2f3336';
+                
+                // Parse hours from the data (format: "YYYY-MM-DD HH:00:00")
+                const labels = rawData.map(d => {
+                    const hour = d.hour.split(' ')[1].substring(0, 5);
+                    return hour;
+                });
+                const data = rawData.map(d => d.tokens);
+                
+                // Destroy existing chart if present
+                if (window.hourlyChart) {
+                    window.hourlyChart.destroy();
+                }
+                
+                window.hourlyChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Tokens',
+                            data: data,
+                            backgroundColor: accentBlue,
+                            borderColor: accentBlue,
+                            borderWidth: 0,
+                            borderRadius: 4,
+                            borderSkipped: false,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                backgroundColor: isDark ? '#1d1f23' : '#ffffff',
+                                titleColor: isDark ? '#e7e9ea' : '#0f1419',
+                                bodyColor: isDark ? '#e7e9ea' : '#0f1419',
+                                borderColor: borderColor,
+                                borderWidth: 1,
+                                cornerRadius: 8,
+                                padding: 12,
+                                displayColors: false,
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.parsed.y.toLocaleString() + ' tokens';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    color: textSecondary,
+                                    font: {
+                                        size: 11,
+                                        family: "'SF Mono', 'Cascadia Code', 'Fira Code', monospace"
+                                    },
+                                    maxRotation: 0
+                                },
+                                border: {
+                                    display: false
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: borderColor,
+                                    drawTicks: false
+                                },
+                                ticks: {
+                                    color: textSecondary,
+                                    font: {
+                                        size: 11
+                                    },
+                                    padding: 8,
+                                    callback: function(value) {
+                                        if (value >= 1000) {
+                                            return (value / 1000).toFixed(1) + 'k';
+                                        }
+                                        return value;
+                                    }
+                                },
+                                border: {
+                                    display: false
+                                }
+                            }
+                        },
+                        animation: {
+                            duration: 400,
+                            easing: 'easeOutQuart'
+                        }
+                    }
+                });
+            })();
+        </script>
+        {% else %}
+        <div class="empty-state-small">
+            <span class="empty-icon-small">📈</span>
+            <p>No usage data in the last 24 hours</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
 <!-- Breakdown by Provider -->
 {% if tokens_by_provider %}
 <div class="analytics-section">
@@ -98,6 +238,43 @@
             </tbody>
         </table>
     </div>
+    
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        <button class="pagination-btn" 
+                {% if has_prev %}
+                hx-get="/partials/analytics/tokens?page={{ page - 1 }}"
+                hx-target="#analytics-content"
+                hx-swap="innerHTML"
+                {% else %}
+                disabled
+                {% endif %}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+            </svg>
+            Prev
+        </button>
+        
+        <span class="pagination-info">
+            Page {{ page }} of {{ total_pages }}
+        </span>
+        
+        <button class="pagination-btn"
+                {% if has_next %}
+                hx-get="/partials/analytics/tokens?page={{ page + 1 }}"
+                hx-target="#analytics-content"
+                hx-swap="innerHTML"
+                {% else %}
+                disabled
+                {% endif %}>
+            Next
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
+            </svg>
+        </button>
+    </div>
+    {% endif %}
     {% else %}
     <div class="section-content">
         <div class="empty-state">

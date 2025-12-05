@@ -232,7 +232,11 @@ class LLMClient:
                     client = self._get_client(provider)
                     if client:
                         tweet = await self._generate_with_provider(
-                            client, provider, system_prompt, user_prompt, operation="generate"
+                            client,
+                            provider,
+                            system_prompt,
+                            user_prompt,
+                            operation="generate",
                         )
                     else:
                         continue
