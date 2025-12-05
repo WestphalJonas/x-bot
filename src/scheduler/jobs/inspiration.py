@@ -12,14 +12,7 @@ from src.web.data_tracker import log_action, log_rejected_tweet, log_written_twe
 from src.x.posting import post_tweet
 from src.x.session import AsyncTwitterSession
 
-# Optional ChromaDB import for duplicate detection
-try:
-    from src.memory.chroma_client import ChromaMemory
-
-    CHROMA_AVAILABLE = True
-except ImportError:
-    ChromaMemory = None  # type: ignore
-    CHROMA_AVAILABLE = False
+from src.memory.chroma_client import ChromaMemory
 
 logger = logging.getLogger(__name__)
 
@@ -138,9 +131,9 @@ async def _process_inspiration_queue_async(
     posts_batch_dicts = state.interesting_posts_queue[:threshold]
     posts_batch = [Post(**p) for p in posts_batch_dicts]
 
-    # Initialize ChromaDB for duplicate detection if available
+    # Initialize ChromaDB for duplicate detection
     chroma_memory = None
-    if CHROMA_AVAILABLE and openai_api_key and ChromaMemory is not None:
+    if openai_api_key:
         try:
             chroma_memory = ChromaMemory(
                 config=config,
@@ -293,4 +286,3 @@ async def _process_inspiration_queue_async(
     finally:
         # Close LLM client to prevent event loop errors
         await llm_client.close()
-

@@ -13,14 +13,7 @@ from src.web.data_tracker import log_action, log_rejected_tweet, log_written_twe
 from src.x.posting import post_tweet
 from src.x.session import AsyncTwitterSession
 
-# Optional ChromaDB import for duplicate detection
-try:
-    from src.memory.chroma_client import ChromaMemory
-
-    CHROMA_AVAILABLE = True
-except ImportError:
-    ChromaMemory = None  # type: ignore
-    CHROMA_AVAILABLE = False
+from src.memory.chroma_client import ChromaMemory
 
 logger = logging.getLogger(__name__)
 
@@ -140,9 +133,9 @@ async def _post_autonomous_tweet_async(
         logger.error("tweet_generation_failed", extra={"error": str(e)}, exc_info=True)
         raise
 
-    # Check for duplicate using ChromaDB if available
+    # Check for duplicate using ChromaDB
     chroma_memory = None
-    if CHROMA_AVAILABLE and openai_api_key and ChromaMemory is not None:
+    if openai_api_key:
         try:
             chroma_memory = ChromaMemory(
                 config=config,

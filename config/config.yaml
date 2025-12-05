@@ -11,23 +11,22 @@ selenium:
 
 llm:
   provider: "openrouter"
-  #fallback_providers:
-   # - "openai"
-   # - "google"
+  fallback_providers:
+    - "openai"
+    - "google"
   model: "x-ai/grok-4.1-fast"
   embedding_model: "text-embedding-3-small"
   embedding_provider: "openai"
   max_tokens: 150
   temperature: 0.8
   similarity_threshold: 0.85
-  use_fallback: true
+  use_fallback: false
 
 scheduler:
   post_interval_hours: 1  # 6 minutes (reduced from 8.0 hours)
   post_jitter_hours: 1  # ~36 seconds (reduced from 1.0 hour)
   mention_check_minutes: 30  # 1 minute (reduced from 30 minutes)
   reading_check_minutes: 30  # 1 minute (reduced from 30 minutes)
-  event_check_minutes: 15  # 1 minute (reduced from 15 minutes)
   inspiration_check_minutes: 60 # 1 minute for testing
   inspiration_batch_size: 20
 
