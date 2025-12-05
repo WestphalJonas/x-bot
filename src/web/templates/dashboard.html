@@ -38,7 +38,7 @@
             <a href="/posts?tab=interested" class="stat-card stat-card-link">
                 <div class="stat-icon">⭐</div>
                 <div class="stat-content">
-                    <div class="stat-value">{{ state.interesting_posts_queue | length }}</div>
+                    <div class="stat-value">{{ state.interesting_posts_queue | length }}/{{ config.scheduler.inspiration_batch_size }}</div>
                     <div class="stat-label">Interesting</div>
                 </div>
             </a>
