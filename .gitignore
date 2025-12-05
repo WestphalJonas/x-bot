@@ -9,3 +9,4 @@ config/cookie.json
 logs/
 *.log
 *.log.*
+uv.lock
