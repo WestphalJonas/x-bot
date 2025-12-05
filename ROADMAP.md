@@ -1,6 +1,6 @@
 # X Bot - Development Roadmap
 
-**Current Phase:** MVP Development - Phase 3 (Notification Checking Implemented)
+**Current Phase:** MVP Development - Phase 4 (Web Dashboard & Analytics Complete)
 
 ## 📊 Current Status Overview
 
@@ -21,12 +21,29 @@
 
 - ✅ **State Management** (`src/state/`)
   - JSON-based state persistence (`data/state.json`)
+  - SQLite database for analytics (`data/bot.db`)
   - Pydantic models for validation (Post, Notification)
   - Atomic writes (temp file → rename)
   - Counters for rate limiting
   - Interesting posts queue (max 50 posts)
   - Notifications queue (max 50 notifications)
   - Processed notification IDs tracking (max 100 IDs)
+  - Token usage tracking per provider/operation
+
+- ✅ **Web Dashboard** (`src/web/`)
+  - FastAPI application with Jinja2 templates
+  - HTMX for dynamic partial loading
+  - Dark/light theme support (X.com-inspired design)
+  - Dashboard with bot status and stats
+  - Posts page (read, written, rejected, interested)
+  - Analytics page with Chart.js hourly token graph
+  - Settings page with live config editing
+  - Pagination for all list views
+
+- ✅ **Memory System** (`src/memory/`)
+  - ChromaDB for vector storage (`data/chroma/`)
+  - Embedding-based duplicate detection
+  - Similarity threshold configuration
 
 #### Twitter/X Automation
 - ✅ **Browser Driver** (`src/x/driver.py`)
@@ -233,24 +250,25 @@
 
 ### Medium Priority - Enhancement Features
 
-#### 7. Memory/Chroma Integration (`src/memory/`) 🟡 **MEDIUM**
-**Status:** ❌ Not Started  
+#### 7. Memory/Chroma Integration (`src/memory/`) ✅ **COMPLETED**
+**Status:** ✅ Completed  
 **Priority:** Medium  
-**Estimated Effort:** 3-4 days
+**Estimated Effort:** 3-4 days (Completed)
 
 **Tasks:**
-- [ ] Create `src/memory/chroma_client.py`
-- [ ] Initialize ChromaDB with persistent storage
-- [ ] Implement embedding storage for all posts/replies
-- [ ] Implement `check_duplicate(text: str, config: BotConfig) -> bool`
-- [ ] Use similarity threshold from config
-- [ ] Store metadata (timestamp, engagement, topics)
-- [ ] Create topic-based collections
+- [x] Create `src/memory/chroma_client.py`
+- [x] Initialize ChromaDB with persistent storage (`data/chroma/`)
+- [x] Implement embedding storage for posts
+- [x] Implement `check_duplicate(text: str) -> bool`
+- [x] Use similarity threshold from config
+- [x] Store metadata (timestamp, topics)
+- [x] Integrate with web dashboard stats
+- [ ] Create topic-based collections (optional, future enhancement)
 
 **Dependencies:**
-- ChromaDB package
-- LLM embedding provider
-- Config similarity threshold
+- ✅ ChromaDB package
+- ✅ LLM embedding provider (OpenAI)
+- ✅ Config similarity threshold
 
 ---
 
@@ -271,22 +289,24 @@
 
 ---
 
-#### 9. Token Counter & Analytics (`src/core/analytics.py`) 🟡 **MEDIUM**
-**Status:** ❌ Not Started  
+#### 9. Token Counter & Analytics (`src/state/database.py`) ✅ **COMPLETED**
+**Status:** ✅ Completed  
 **Priority:** Medium  
-**Estimated Effort:** 1-2 days
+**Estimated Effort:** 1-2 days (Completed)
 
 **Tasks:**
-- [ ] Create `src/core/analytics.py`
-- [ ] Implement token counting for all LLM calls
-- [ ] Track token usage per provider (OpenAI, OpenRouter, etc.)
-- [ ] Store token metrics in state/database
-- [ ] Track costs per provider (if available)
-- [ ] Add token usage logging with structured context
+- [x] Implement token counting for all LLM calls
+- [x] Track token usage per provider (OpenAI, OpenRouter, etc.)
+- [x] Store token metrics in SQLite database (`data/bot.db`)
+- [x] Track token usage per operation (generate, validate, interest_check, inspiration)
+- [x] Add token usage logging with structured context
+- [x] Add hourly aggregation for 24h usage graph
+- [x] Integrate with web dashboard analytics page
+- [ ] Track costs per provider (optional, future enhancement)
 
 **Dependencies:**
-- LLM Client
-- State management or database
+- ✅ LLM Client
+- ✅ SQLite database (`src/state/database.py`)
 
 ---
 
@@ -311,29 +331,37 @@
 
 ---
 
-#### 11. Web Dashboard (`src/web/`) 🟡 **MEDIUM**
-**Status:** ❌ Not Started  
+#### 11. Web Dashboard (`src/web/`) ✅ **COMPLETED**
+**Status:** ✅ Completed  
 **Priority:** Medium  
-**Estimated Effort:** 3-4 days
+**Estimated Effort:** 3-4 days (Completed)
 
 **Tasks:**
-- [ ] Create `src/web/` directory structure
-- [ ] Set up FastAPI application (`src/web/app.py`)
-- [ ] Create API endpoints for dashboard data
-- [ ] Implement dashboard frontend (HTML/JS or React)
-- [ ] Add endpoint: `/api/posts/read` - Last read tweets overview
-- [ ] Add endpoint: `/api/posts/written` - Last written/posted tweets
-- [ ] Add endpoint: `/api/posts/rejected` - Tweets that didn't pass evaluation
-- [ ] Add endpoint: `/api/analytics/tokens` - Token usage analytics
-- [ ] Add endpoint: `/api/state` - Current bot state
-- [ ] Integrate with existing state management
+- [x] Create `src/web/` directory structure
+- [x] Set up FastAPI application (`src/web/app.py`)
+- [x] Create API endpoints for dashboard data
+- [x] Implement dashboard frontend (Jinja2 templates + HTMX)
+- [x] Add endpoint: `/api/posts/read` - Last read tweets overview
+- [x] Add endpoint: `/api/posts/written` - Last written/posted tweets
+- [x] Add endpoint: `/api/posts/rejected` - Tweets that didn't pass evaluation
+- [x] Add endpoint: `/api/analytics/tokens` - Token usage analytics
+- [x] Add endpoint: `/api/state` - Current bot state
+- [x] Add endpoint: `/api/settings` - Bot configuration management
+- [x] Add endpoint: `/api/queue` - Job queue status
+- [x] Integrate with existing state management
+- [x] Add dark/light theme support (X.com-inspired design)
+- [x] Add HTMX for dynamic partial loading
+- [x] Add pagination for all list views
+- [x] Add Chart.js hourly token usage graph
+- [x] Add settings page with live config editing
+- [x] Add config reload functionality
 - [ ] Add authentication/security for dashboard access
 
 **Dependencies:**
-- FastAPI package
-- Token counter/analytics
-- Tweet re-evaluation (for rejected tweets tracking)
-- State management
+- ✅ FastAPI package
+- ✅ Token counter/analytics (SQLite-based)
+- ✅ Tweet re-evaluation (rejected tweets tracking)
+- ✅ State management
 
 ---
 
@@ -372,14 +400,17 @@
 
 ---
 
-### Phase 4: Memory & Enhancement (Week 2-3)
-**Goal:** Add memory and duplicate detection
+### Phase 4: Memory & Enhancement (Week 2-3) ✅ **COMPLETED**
+**Goal:** Add memory, duplicate detection, and web dashboard
 
 1. ✅ ChromaDB Integration
 2. ✅ Embedding storage
 3. ✅ Duplicate detection
+4. ✅ Web Dashboard (FastAPI + HTMX)
+5. ✅ Token Analytics with Chart.js
+6. ✅ Settings Management UI
 
-**Deliverable:** Bot remembers past interactions, avoids duplicates
+**Deliverable:** Bot remembers past interactions, avoids duplicates, full monitoring dashboard
 
 ---
 
@@ -397,6 +428,9 @@
 | **Personality Integration** | ⚠️ Partial | Config exists, not in reactions |
 | **Check Trends** | ❌ Missing | `src/ingest/trends.py` |
 | **Scheduler** | ✅ Done | `src/scheduler/bot_scheduler.py` |
+| **Web Dashboard** | ✅ Done | `src/web/` (FastAPI + HTMX) |
+| **Token Analytics** | ✅ Done | `src/state/database.py` + Chart.js |
+| **Memory/Deduplication** | ✅ Done | `src/memory/chroma_client.py` |
 
 ---
 
@@ -413,28 +447,35 @@
 - ✅ Notification checking implemented (replies and mentions queued for processing)
 - ✅ Notifications queue implemented (max 50 notifications)
 - ✅ Processed notification IDs tracking (max 100 IDs)
+- ✅ Memory/duplicate detection (ChromaDB integration)
+- ✅ Web dashboard with analytics
+- ✅ Token usage tracking with hourly graphs
 - No reaction/reply functionality (notifications queue ready for processing)
 - No positive intent detection (notifications queue ready for processing)
-- No memory/duplicate detection
+- No dashboard authentication (security)
 - Media-only posts are skipped during reading (no text to evaluate) - working as intended
 - Retweets without text are skipped during reading - working as intended
 
 ### Technical Debt
 - ✅ Main loop refactored for scheduler integration
 - ✅ Inspiration queue processing bugs fixed (wrapper function and login handling)
+- ✅ Token counting implemented (SQLite database with analytics)
+- ✅ Web dashboard implemented (FastAPI + HTMX + Chart.js)
+- ✅ ChromaDB memory integration for duplicate detection
 - LLM client needs embedding support (currently only generation)
 - State management needs counter reset logic (midnight UTC)
 - Error handling improved with graceful job failure handling
-- Token counting not yet implemented (needed for analytics)
 - Tweet re-evaluation before posting not implemented
+- Dashboard authentication not implemented (security)
 
 ### Future Enhancements (Post-MVP)
 - RSS feed ingestion (`src/ingest/rss.py`)
 - Event detection (`src/ingest/events.py`)
 - Advanced monitoring (`src/monitoring/`)
-- SQLite/PostgreSQL migration for state
-- Web dashboard for monitoring (FastAPI)
+- PostgreSQL migration for state (SQLite already implemented)
+- Dashboard authentication/security
 - Multi-account support
+- Cost tracking per LLM provider
 
 ---
 
@@ -446,9 +487,11 @@
 - [x] Bot generates inspired content from interesting posts (batch processing implemented)
 - [x] Bot checks for notifications periodically (notifications checking implemented, queue ready for processing)
 - [ ] Bot replies to positive notifications (notifications queue ready, needs intent detection)
-- [ ] Bot avoids duplicate posts (memory integration)
+- [x] Bot avoids duplicate posts (ChromaDB memory integration)
 - [x] All rate limits enforced
 - [x] All compliance checks in place
+- [x] Web dashboard for monitoring and configuration
+- [x] Token usage analytics with hourly graph
 
 ---
 
