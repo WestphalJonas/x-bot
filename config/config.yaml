@@ -1,48 +1,44 @@
-rate_limits:
-  max_posts_per_day: 10  # Increased for testing
-  max_replies_per_day: 50  # Increased for testing
-  reset_time_utc: "00:00"
-
-selenium:
-  min_delay_seconds: 1.0  # Reduced from 5.0 for faster debugging
-  max_delay_seconds: 3.0  # Reduced from 15.0 for faster debugging
-  headless: true  # Keep visible for debugging
-  user_agent_rotation: false
-
 llm:
-  provider: "openrouter"
+  embedding_model: text-embedding-3-small
+  embedding_provider: openai
   fallback_providers:
-    - "openai"
-    - "google"
-  model: "x-ai/grok-4.1-fast"
-  embedding_model: "text-embedding-3-small"
-  embedding_provider: "openai"
+  - openai
+  - google
   max_tokens: 150
-  temperature: 0.8
+  model: x-ai/grok-4.1-fast
+  provider: openrouter
   similarity_threshold: 0.85
+  temperature: 0.8
   use_fallback: false
-
-scheduler:
-  post_interval_hours: 1  # 6 minutes (reduced from 8.0 hours)
-  post_jitter_hours: 1  # ~36 seconds (reduced from 1.0 hour)
-  mention_check_minutes: 30  # 1 minute (reduced from 30 minutes)
-  reading_check_minutes: 30  # 1 minute (reduced from 30 minutes)
-  inspiration_check_minutes: 60 # 1 minute for testing
-  inspiration_batch_size: 20
-
 personality:
-  tone: "professional"
-  topics:
-    - "AI"
-    - "technology"
-    - "crypto"
-    - "blockchain"
-    - "web3"
-    - "defi"
-    - "nft"
-    - "metaverse"
-    - "gaming"
-  style: "cryptic"
-  min_tweet_length: 60
   max_tweet_length: 280
-
+  min_tweet_length: 60
+  style: cryptic
+  tone: professional
+  topics:
+  - AI
+  - technology
+  - crypto
+  - blockchain
+  - web3
+  - defi
+  - nft
+  - metaverse
+  - gaming
+rate_limits:
+  max_posts_per_day: 10
+  max_replies_per_day: 50
+  reset_time_utc: 00:00
+scheduler:
+  event_check_minutes: 15
+  inspiration_batch_size: 20
+  inspiration_check_minutes: 60
+  mention_check_minutes: 30
+  post_interval_hours: 2.0
+  post_jitter_hours: 1.0
+  reading_check_minutes: 30
+selenium:
+  headless: true
+  max_delay_seconds: 3.0
+  min_delay_seconds: 1.0
+  user_agent_rotation: false

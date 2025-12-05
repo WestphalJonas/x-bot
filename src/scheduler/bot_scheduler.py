@@ -91,10 +91,28 @@ class JobQueue:
 # Global job queue instance
 _job_queue = JobQueue()
 
+# Global scheduler instance (set via set_scheduler from main.py)
+_scheduler: "BotScheduler | None" = None
+
 
 def get_job_queue() -> JobQueue:
     """Get the global job queue."""
     return _job_queue
+
+
+def get_scheduler() -> "BotScheduler | None":
+    """Get the global scheduler instance."""
+    return _scheduler
+
+
+def set_scheduler(scheduler: "BotScheduler") -> None:
+    """Set the global scheduler instance.
+
+    Called from main.py after scheduler creation.
+    """
+    global _scheduler
+    _scheduler = scheduler
+    logger.info("scheduler_registered_globally")
 
 
 class BotScheduler:
@@ -109,6 +127,8 @@ class BotScheduler:
         self.config = config
         self.scheduler = BackgroundScheduler()
         self._is_running = False
+        # Store job functions for reload capability
+        self._job_funcs: dict[str, Callable] = {}
 
     def add_job(
         self,
@@ -157,6 +177,7 @@ class BotScheduler:
             func: Function to execute
             **kwargs: Additional arguments to pass to add_job
         """
+        self._job_funcs["post_tweet"] = func
         base_interval_hours = self.config.scheduler.post_interval_hours
         jitter_hours = self.config.scheduler.post_jitter_hours
 
@@ -175,6 +196,7 @@ class BotScheduler:
             func: Function to execute
             **kwargs: Additional arguments to pass to add_job
         """
+        self._job_funcs["read_posts"] = func
         interval_minutes = self.config.scheduler.reading_check_minutes
         trigger = IntervalTrigger(minutes=interval_minutes)
         self.add_job(func=func, job_id="read_posts", trigger=trigger, **kwargs)
@@ -186,6 +208,7 @@ class BotScheduler:
             func: Function to execute
             **kwargs: Additional arguments to pass to add_job
         """
+        self._job_funcs["check_notifications"] = func
         interval_minutes = self.config.scheduler.mention_check_minutes
         trigger = IntervalTrigger(minutes=interval_minutes)
         self.add_job(func=func, job_id="check_notifications", trigger=trigger, **kwargs)
@@ -197,11 +220,72 @@ class BotScheduler:
             func: Function to execute
             **kwargs: Additional arguments to pass to add_job
         """
+        self._job_funcs["process_inspiration_queue"] = func
         interval_minutes = self.config.scheduler.inspiration_check_minutes
         trigger = IntervalTrigger(minutes=interval_minutes)
         self.add_job(
             func=func, job_id="process_inspiration_queue", trigger=trigger, **kwargs
         )
+
+    def reload_config(self) -> dict[str, str]:
+        """Reload configuration and reschedule all jobs with updated intervals.
+
+        Returns:
+            Dict with status and details about what was reloaded
+        """
+        logger.info("config_reload_started")
+
+        # Load fresh config
+        new_config = BotConfig.load()
+        old_config = self.config
+        self.config = new_config
+
+        changes = []
+
+        # Reschedule posting job if interval changed
+        if "post_tweet" in self._job_funcs:
+            old_interval = old_config.scheduler.post_interval_hours
+            new_interval = new_config.scheduler.post_interval_hours
+            if old_interval != new_interval:
+                changes.append(f"post_interval: {old_interval}h → {new_interval}h")
+            self.setup_posting_job(self._job_funcs["post_tweet"])
+
+        # Reschedule reading job if interval changed
+        if "read_posts" in self._job_funcs:
+            old_interval = old_config.scheduler.reading_check_minutes
+            new_interval = new_config.scheduler.reading_check_minutes
+            if old_interval != new_interval:
+                changes.append(f"reading_interval: {old_interval}m → {new_interval}m")
+            self.setup_reading_job(self._job_funcs["read_posts"])
+
+        # Reschedule notifications job if interval changed
+        if "check_notifications" in self._job_funcs:
+            old_interval = old_config.scheduler.mention_check_minutes
+            new_interval = new_config.scheduler.mention_check_minutes
+            if old_interval != new_interval:
+                changes.append(f"mention_interval: {old_interval}m → {new_interval}m")
+            self.setup_notifications_job(self._job_funcs["check_notifications"])
+
+        # Reschedule inspiration job if interval changed
+        if "process_inspiration_queue" in self._job_funcs:
+            old_interval = old_config.scheduler.inspiration_check_minutes
+            new_interval = new_config.scheduler.inspiration_check_minutes
+            if old_interval != new_interval:
+                changes.append(
+                    f"inspiration_interval: {old_interval}m → {new_interval}m"
+                )
+            self.setup_inspiration_job(self._job_funcs["process_inspiration_queue"])
+
+        logger.info(
+            "config_reload_completed",
+            extra={"changes": changes, "jobs_rescheduled": len(self._job_funcs)},
+        )
+
+        return {
+            "status": "ok",
+            "jobs_rescheduled": len(self._job_funcs),
+            "changes": changes,
+        }
 
     def start(self) -> None:
         """Start the scheduler."""

@@ -229,6 +229,62 @@ button {
     padding: 12px 0;
     border-top: 1px solid var(--border-color);
     margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.reload-config-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.reload-config-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--border-light);
+}
+
+.reload-config-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.reload-config-btn.reload-success {
+    background: var(--accent-green);
+    color: white;
+    border-color: var(--accent-green);
+}
+
+.reload-config-btn.reload-error {
+    background: var(--accent-red);
+    color: white;
+    border-color: var(--accent-red);
+}
+
+.reload-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--text-tertiary);
+    border-top-color: var(--text-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
 .status-indicator {

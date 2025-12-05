@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from src.core.config import BotConfig, EnvSettings
 from src.scheduler import BotScheduler
-from src.scheduler.bot_scheduler import get_job_lock, get_job_queue
+from src.scheduler.bot_scheduler import get_job_lock, get_job_queue, set_scheduler
 from src.scheduler.jobs import (
     check_notifications,
     post_autonomous_tweet,
@@ -167,6 +167,9 @@ def main():
 
     # Initialize scheduler
     scheduler = BotScheduler(config)
+
+    # Register scheduler globally for API access (config reload)
+    set_scheduler(scheduler)
 
     # Setup jobs with wrappers that pass config and env_settings
     scheduler.setup_posting_job(

@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from src.core.config import BotConfig
-from src.scheduler.bot_scheduler import get_job_queue
+from src.scheduler.bot_scheduler import get_job_queue, get_scheduler
 from src.state.database import get_database
 from src.state.manager import load_state
 from src.web.app import ChromaMemoryDep, ConfigDep, get_config
@@ -344,11 +344,11 @@ async def get_settings(config: ConfigDep) -> SettingsResponse:
 
 
 @router.post("/settings")
-async def update_settings(updates: SettingsUpdateRequest) -> dict[str, str]:
+async def update_settings(updates: SettingsUpdateRequest) -> dict[str, Any]:
     """Update bot configuration settings.
 
     Creates a backup of the current config before saving.
-    Clears the config cache to reload the new settings.
+    Clears the config cache and triggers scheduler reload.
     """
     config_path = Path("config/config.yaml")
     backup_path = Path("config/config.yaml.bak")
@@ -376,10 +376,59 @@ async def update_settings(updates: SettingsUpdateRequest) -> dict[str, str]:
         # Clear the config cache so next request gets fresh config
         get_config.cache_clear()
 
-        return {"status": "ok", "message": "Settings saved successfully"}
+        # Reload scheduler with new config
+        reload_result = _reload_scheduler_config()
+
+        return {
+            "status": "ok",
+            "message": "Settings saved successfully",
+            "scheduler_reload": reload_result,
+        }
 
     except Exception as e:
         # Restore backup if save failed
         if backup_path.exists():
             shutil.copy(backup_path, config_path)
         raise HTTPException(status_code=400, detail=f"Failed to save settings: {e}")
+
+
+def _reload_scheduler_config() -> dict[str, Any]:
+    """Helper to reload scheduler config.
+
+    Returns:
+        Dict with reload status and details
+    """
+    scheduler = get_scheduler()
+    if scheduler is None:
+        return {"status": "skipped", "reason": "scheduler not available"}
+
+    try:
+        result = scheduler.reload_config()
+        return result
+    except Exception as e:
+        return {"status": "error", "reason": str(e)}
+
+
+@router.post("/config/reload")
+async def reload_config() -> dict[str, Any]:
+    """Manually reload configuration and reschedule jobs.
+
+    This endpoint allows manually triggering a config reload without
+    saving new settings (useful if config.yaml was edited externally).
+    """
+    # Clear the config cache first
+    get_config.cache_clear()
+
+    # Reload scheduler
+    result = _reload_scheduler_config()
+
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=500, detail=result.get("reason", "Reload failed")
+        )
+
+    return {
+        "status": "ok",
+        "message": "Configuration reloaded",
+        **result,
+    }
