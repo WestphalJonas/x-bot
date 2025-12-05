@@ -273,6 +273,8 @@ async def _post_autonomous_tweet_async(
         raise
 
     finally:
-        # Close LLM client to prevent event loop errors
+        # Close clients to prevent event loop shutdown errors
+        if chroma_memory:
+            await chroma_memory.close()
         await llm_client.close()
 

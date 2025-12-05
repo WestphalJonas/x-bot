@@ -78,7 +78,13 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown: Clear caches
+    # Shutdown: Close cached resources and clear caches
+    memory = get_chroma_memory()
+    if memory is not None and hasattr(memory, "close"):
+        try:
+            await memory.close()  # type: ignore[func-returns-value]
+        except Exception:
+            pass
     get_config.cache_clear()
     get_chroma_memory.cache_clear()
 

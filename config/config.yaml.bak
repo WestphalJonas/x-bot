@@ -21,9 +21,6 @@ personality:
   - crypto
   - blockchain
   - web3
-  - defi
-  - nft
-  - metaverse
   - gaming
   - memes
 rate_limits:

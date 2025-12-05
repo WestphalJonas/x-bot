@@ -75,6 +75,13 @@ class ChromaMemory:
             metadata={"description": "Posts read from timeline"}
         )
 
+    async def close(self) -> None:
+        """Close underlying async clients to avoid loop shutdown errors."""
+        try:
+            await self.openai_client.close()
+        except Exception as exc:
+            logger.debug("chroma_memory_close_failed", extra={"error": str(exc)})
+
     def _hash_text(self, text: str) -> str:
         """Generate consistent hash for text."""
         return hashlib.sha256(text.encode()).hexdigest()[:16]

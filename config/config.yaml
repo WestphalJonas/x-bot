@@ -21,7 +21,6 @@ personality:
   - crypto
   - blockchain
   - web3
-  - gaming
   - memes
 rate_limits:
   max_posts_per_day: 10
