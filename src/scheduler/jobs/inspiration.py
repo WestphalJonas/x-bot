@@ -31,7 +31,6 @@ def process_inspiration_queue(config: BotConfig, env_settings: EnvSettings) -> N
     logger.info("job_started", extra={"job_id": job_id})
 
     try:
-        # Run async operations in event loop
         asyncio.run(_process_inspiration_queue_async(config, env_settings))
         logger.info("job_completed", extra={"job_id": job_id})
 
@@ -56,12 +55,11 @@ async def _process_inspiration_queue_async(
         config: Bot configuration
         env_settings: Dictionary with environment variables
     """
-    # Load state (with automatic counter reset check)
+    # Refresh state so we respect the daily limit before spending tokens
     state = await load_state(
         reset_time_utc=config.rate_limits.reset_time_utc,
     )
 
-    # Check rate limits before processing
     if state.counters["posts_today"] >= config.rate_limits.max_posts_per_day:
         logger.warning(
             "rate_limit_exceeded",
@@ -72,11 +70,8 @@ async def _process_inspiration_queue_async(
         )
         return
 
-    # Check if we have enough posts in the queue
-    # Default threshold is 10 if not specified in config
     threshold = config.scheduler.inspiration_batch_size
 
-    # Queue is stored as list of dicts in state.interesting_posts_queue
     queue_size = len(state.interesting_posts_queue)
 
     if queue_size < threshold:
@@ -94,7 +89,7 @@ async def _process_inspiration_queue_async(
         extra={"queue_size": queue_size},
     )
 
-    # Get environment variables
+    # Pull credentials up front so we can fail fast
     openai_api_key = env_settings.get("OPENAI_API_KEY")
     openrouter_api_key = env_settings.get("OPENROUTER_API_KEY")
     google_api_key = env_settings.get("GOOGLE_API_KEY")
@@ -118,7 +113,6 @@ async def _process_inspiration_queue_async(
     if not twitter_password:
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
-    # Initialize LLM client
     llm_client = LLMClient(
         config=config,
         openai_api_key=openai_api_key,
@@ -127,12 +121,10 @@ async def _process_inspiration_queue_async(
         anthropic_api_key=anthropic_api_key,
     )
 
-    # Take the first batch of posts
-    # We need to convert dicts back to Post objects for the LLM client
     posts_batch_dicts = state.interesting_posts_queue[:threshold]
     posts_batch = [Post(**p) for p in posts_batch_dicts]
 
-    # Initialize ChromaDB for duplicate detection
+    # Duplicate checks only run when embeddings are available
     chroma_memory = None
     if openai_api_key:
         try:
@@ -146,7 +138,6 @@ async def _process_inspiration_queue_async(
                 extra={"error": str(e)},
             )
 
-    # Generate inspired tweet with retry on validation failure
     max_attempts = 3
     tweet_text = None
 
@@ -183,7 +174,7 @@ async def _process_inspiration_queue_async(
                         extra={"error": str(e)},
                     )
 
-            # Validate tweet
+            # Local validation before the gatekeeper LLM
             is_valid, error_message = await llm_client.validate_tweet(tweet_text)
             if is_valid:
                 logger.info(
@@ -224,7 +215,6 @@ async def _process_inspiration_queue_async(
                     f"Inspiration tweet validation failed after {max_attempts} attempts: {error_message}"
                 )
 
-        # Final LLM gatekeeper check
         approved, evaluation_reason = await re_evaluate_tweet(
             tweet_text=tweet_text,
             config=config,
@@ -252,7 +242,6 @@ async def _process_inspiration_queue_async(
                 f"Inspiration tweet re-evaluation failed: {evaluation_reason}"
             )
 
-        # Use session manager for browser operations
         async with AsyncTwitterSession(
             config, twitter_username, twitter_password
         ) as driver:
@@ -261,13 +250,11 @@ async def _process_inspiration_queue_async(
             if success:
                 logger.info("inspiration_tweet_posted")
 
-                # Log written tweet for dashboard
                 await log_written_tweet(
                     text=tweet_text,
                     tweet_type="inspiration",
                 )
 
-                # Store tweet in ChromaDB for future duplicate detection
                 if chroma_memory:
                     try:
                         await chroma_memory.store_tweet(
@@ -281,24 +268,19 @@ async def _process_inspiration_queue_async(
                             extra={"error": str(e)},
                         )
 
-                # Update state: remove processed posts
-                # We reload state to avoid race conditions
+                # Reload state to avoid clobbering concurrent updates, then drop processed posts
                 current_state = await load_state()
 
-                # Remove the first 'threshold' items
-                # We assume the queue hasn't changed significantly (FIFO)
                 if len(current_state.interesting_posts_queue) >= threshold:
                     current_state.interesting_posts_queue = (
                         current_state.interesting_posts_queue[threshold:]
                     )
 
-                # Increment post count
                 current_state.counters["posts_today"] += 1
                 current_state.last_post_time = datetime.now(timezone.utc)
 
                 await save_state(current_state)
 
-                # Log action
                 await log_action("Posted inspiration tweet")
             else:
                 logger.error("failed_to_post_inspiration_tweet")
@@ -309,11 +291,9 @@ async def _process_inspiration_queue_async(
             extra={"error": str(e)},
             exc_info=True,
         )
-        # Don't remove posts from queue if generation/posting failed
         raise
 
     finally:
-        # Close clients to prevent event loop shutdown errors
         if chroma_memory:
             await chroma_memory.close()
         await llm_client.close()

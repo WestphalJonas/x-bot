@@ -25,7 +25,6 @@ except ImportError:
     ChromaMemory = None  # type: ignore
     CHROMA_AVAILABLE = False
 
-# Paths
 WEB_DIR = Path(__file__).parent
 TEMPLATES_DIR = WEB_DIR / "templates"
 STATIC_DIR = WEB_DIR / "static"
@@ -72,16 +71,15 @@ ChromaMemoryDep = Annotated["ChromaMemory | None", Depends(get_chroma_memory)]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
-    # Startup: Load environment variables
+    # Load environment before dependency evaluation and warm caches to avoid first-request latency
     load_dotenv()
 
-    # Pre-load config and chroma memory to warm up the cache
     get_config()
     get_chroma_memory()
 
     yield
 
-    # Shutdown: Close cached resources and clear caches
+    # Shutdown: close cached memory client and clear dependency caches
     memory = get_chroma_memory()
     if memory is not None and hasattr(memory, "close"):
         try:
@@ -105,7 +103,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Session middleware for dashboard auth
     app.add_middleware(
         SessionMiddleware,
         secret_key=auth_settings.auth_secret_key,
@@ -115,18 +112,14 @@ def create_app() -> FastAPI:
         https_only=auth_settings.session_https_only,
     )
 
-    # Mount static files
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    # Setup templates
     TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-    # Store templates in app state for access in routes
     app.state.templates = templates
 
-    # Import and include routers
     from src.web.routes.auth import router as auth_router
     from src.web.routes.api import router as api_router
     from src.web.routes.views import router as views_router

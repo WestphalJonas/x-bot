@@ -33,42 +33,35 @@ def should_reset_counters(state: AgentState, reset_time_utc: str = "00:00") -> b
     """
     now = datetime.now(timezone.utc)
 
-    # Parse reset time
     try:
         reset_hour, reset_minute = map(int, reset_time_utc.split(":"))
     except (ValueError, AttributeError):
         reset_hour, reset_minute = 0, 0
 
-    # Calculate today's reset time
     today_reset = now.replace(
         hour=reset_hour, minute=reset_minute, second=0, microsecond=0
     )
 
-    # If current time is before today's reset time, check against yesterday's reset
+    # Before the daily reset window, only reset if we missed yesterday's reset entirely
     if now < today_reset:
-        # We're before today's reset, so no reset needed unless last reset was > 24h ago
         if state.last_counter_reset is None:
             return True
 
-        # Ensure last_counter_reset is timezone-aware
         last_reset = state.last_counter_reset
         if last_reset.tzinfo is None:
             last_reset = last_reset.replace(tzinfo=timezone.utc)
 
-        # Reset if last reset was more than 24 hours ago
         hours_since_reset = (now - last_reset).total_seconds() / 3600
         return hours_since_reset >= 24
 
-    # Current time is at or after today's reset time
+    # After the reset window, require that we have recorded a reset for today
     if state.last_counter_reset is None:
         return True
 
-    # Ensure last_counter_reset is timezone-aware
     last_reset = state.last_counter_reset
     if last_reset.tzinfo is None:
         last_reset = last_reset.replace(tzinfo=timezone.utc)
 
-    # Reset if last reset was before today's reset time
     return last_reset < today_reset
 
 
@@ -117,7 +110,6 @@ async def load_state(
 
         state: AgentState
         if not path.exists():
-            # Return default state if file doesn't exist
             state = AgentState()
         else:
             try:
@@ -131,17 +123,14 @@ async def load_state(
                 OSError,
                 UnicodeDecodeError,
             ) as e:
-                # If file is corrupted or has encoding issues, return default state
                 logger.warning(
                     "state_load_error",
                     extra={"error": str(e), "path": str(path)},
                 )
                 state = AgentState()
 
-        # Check if counters need to be reset
         if should_reset_counters(state, reset_time_utc):
             state = reset_counters(state)
-            # Save the updated state with reset counters (lock already held)
             await _save_state_internal(state, state_path)
 
         return state
@@ -161,17 +150,15 @@ async def _save_state_internal(
     path = Path(state_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write to temp file first
     temp_path = path.with_suffix(".tmp")
 
     try:
         async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
             await f.write(state.model_dump_json(indent=2))
 
-        # Atomic rename
+        # Atomic rename keeps readers from seeing partial writes
         temp_path.replace(path)
     except OSError:
-        # Clean up temp file on error
         if temp_path.exists():
             temp_path.unlink()
         raise

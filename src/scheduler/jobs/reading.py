@@ -29,7 +29,6 @@ def read_frontpage_posts(config: BotConfig, env_settings: EnvSettings) -> None:
     logger.info("job_started", extra={"job_id": job_id})
 
     try:
-        # Run async operations in event loop
         asyncio.run(_read_frontpage_posts_async(config, env_settings))
         logger.info("job_completed", extra={"job_id": job_id})
 
@@ -54,7 +53,6 @@ async def _read_frontpage_posts_async(
         config: Bot configuration
         env_settings: Dictionary with environment variables
     """
-    # Get environment variables
     twitter_username = env_settings.get("TWITTER_USERNAME")
     twitter_password = env_settings.get("TWITTER_PASSWORD")
     openai_api_key = env_settings.get("OPENAI_API_KEY")
@@ -67,7 +65,6 @@ async def _read_frontpage_posts_async(
     if not twitter_password:
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
-    # Validate that at least one LLM provider is configured
     has_llm_provider = any(
         [openai_api_key, openrouter_api_key, google_api_key, anthropic_api_key]
     )
@@ -77,7 +74,6 @@ async def _read_frontpage_posts_async(
             extra={"detail": "Interest detection will be skipped"},
         )
 
-    # Initialize LLM client for interest detection
     llm_client = None
     if has_llm_provider:
         llm_client = LLMClient(
@@ -88,12 +84,10 @@ async def _read_frontpage_posts_async(
             anthropic_api_key=anthropic_api_key,
         )
 
-    # Use session manager for browser operations
     try:
         async with AsyncTwitterSession(
             config, twitter_username, twitter_password
         ) as driver:
-            # Read posts
             logger.info("reading_frontpage_posts")
             posts = read_posts_from_frontpage(driver, config, count=10)
 
@@ -116,13 +110,10 @@ async def _read_frontpage_posts_async(
                 },
             )
 
-        # Get database for tracking read posts
         db = await get_database()
 
-        # Evaluate posts for interest if LLM client is available (outside browser session)
         interesting_posts = []
         if llm_client and posts:
-            # Load state to check for already-queued posts
             state = await load_state()
             queued_post_ids = {p["post_id"] for p in state.interesting_posts_queue}
 
@@ -131,14 +122,12 @@ async def _read_frontpage_posts_async(
             )
 
             for post in posts:
-                # Skip posts already seen (stored in SQLite)
                 if post.post_id and await db.has_seen_post(post.post_id):
                     logger.info(
                         "post_skipped_already_seen",
                         extra={"post_id": post.post_id, "username": post.username},
                     )
                     continue
-                # Skip posts already in queue
                 if post.post_id in queued_post_ids:
                     logger.info(
                         "post_skipped_already_in_queue",
@@ -147,11 +136,9 @@ async def _read_frontpage_posts_async(
                     continue
 
                 try:
-                    # Check if post is interesting
                     is_interesting = await check_interest(post, config, llm_client)
                     post.is_interesting = is_interesting
 
-                    # Log each post evaluation for dashboard
                     logger.info(
                         "post_evaluated",
                         extra={
@@ -170,16 +157,13 @@ async def _read_frontpage_posts_async(
                         },
                     )
 
-                    # Collect interesting posts
                     if is_interesting:
                         interesting_posts.append(post)
 
-                    # Store post in SQLite (regardless of interest)
                     if post.post_id:
                         await db.store_read_post(post)
 
                 except Exception as e:
-                    # Handle LLM failures gracefully
                     logger.warning(
                         "interest_check_failed_for_post",
                         extra={
@@ -189,10 +173,8 @@ async def _read_frontpage_posts_async(
                         },
                         exc_info=True,
                     )
-                    # Mark as not interesting on error (conservative approach)
                     post.is_interesting = False
 
-            # Log summary statistics
             logger.info(
                 "interest_evaluation_summary",
                 extra={
@@ -202,14 +184,11 @@ async def _read_frontpage_posts_async(
                 },
             )
 
-            # Load state and update queue
             if interesting_posts:
                 state = await load_state()
 
-                # Convert posts to dict for storage (Pydantic models need to be serialized)
                 post_dicts = [post.model_dump() for post in interesting_posts]
 
-                # Log each post being added to queue
                 for post in interesting_posts:
                     logger.info(
                         "interesting_post_added_to_queue",
@@ -223,10 +202,8 @@ async def _read_frontpage_posts_async(
                         },
                     )
 
-                # Append to queue with size limit
                 state.interesting_posts_queue.extend(post_dicts)
 
-                # Trim queue if it exceeds max size (keep most recent)
                 if len(state.interesting_posts_queue) > QueueLimits.INTERESTING_POSTS:
                     state.interesting_posts_queue = state.interesting_posts_queue[
                         -QueueLimits.INTERESTING_POSTS :
@@ -239,7 +216,6 @@ async def _read_frontpage_posts_async(
                         },
                     )
 
-                # Save state with updated queue
                 await save_state(state)
 
                 logger.info(
@@ -254,11 +230,9 @@ async def _read_frontpage_posts_async(
                 "interest_detection_skipped",
                 extra={"reason": "No LLM provider configured"},
             )
-            # Mark all posts as not evaluated
             for post in posts:
                 post.is_interesting = None
 
-        # Log action
         await log_action(f"Read {len(posts)} posts from timeline")
 
         logger.info("reading_completed_successfully")
@@ -268,7 +242,6 @@ async def _read_frontpage_posts_async(
         raise
 
     finally:
-        # Close LLM client to prevent event loop errors
         if llm_client:
             await llm_client.close()
 

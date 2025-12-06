@@ -27,7 +27,6 @@ def check_notifications(config: BotConfig, env_settings: EnvSettings) -> None:
     logger.info("job_started", extra={"job_id": job_id})
 
     try:
-        # Run async operations in event loop
         asyncio.run(_check_notifications_async(config, env_settings))
         logger.info("job_completed", extra={"job_id": job_id})
 
@@ -52,7 +51,6 @@ async def _check_notifications_async(
         config: Bot configuration
         env_settings: Dictionary with environment variables
     """
-    # Get environment variables
     twitter_username = env_settings.get("TWITTER_USERNAME")
     twitter_password = env_settings.get("TWITTER_PASSWORD")
 
@@ -61,16 +59,13 @@ async def _check_notifications_async(
     if not twitter_password:
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
-    # Load state to check for processed notifications
     state = await load_state()
     processed_ids = set(state.processed_notification_ids)
 
-    # Use session manager for browser operations
     try:
         async with AsyncTwitterSession(
             config, twitter_username, twitter_password
         ) as driver:
-            # Check notifications
             logger.info("checking_notifications")
             notifications = check_notifications_func(driver, config, count=20)
 
@@ -92,7 +87,6 @@ async def _check_notifications_async(
                 },
             )
 
-        # Filter out already processed notifications (outside browser session)
         new_notifications = [
             n for n in notifications if n.notification_id not in processed_ids
         ]
@@ -106,15 +100,11 @@ async def _check_notifications_async(
             },
         )
 
-        # Store new notifications in queue
         if new_notifications:
-            # Convert notifications to dict for storage
             notification_dicts = [n.model_dump() for n in new_notifications]
 
-            # Append to queue with size limit
             state.notifications_queue.extend(notification_dicts)
 
-            # Trim queue if it exceeds max size (keep most recent)
             if len(state.notifications_queue) > QueueLimits.NOTIFICATIONS:
                 state.notifications_queue = state.notifications_queue[
                     -QueueLimits.NOTIFICATIONS :
@@ -127,7 +117,6 @@ async def _check_notifications_async(
                     },
                 )
 
-            # Update processed notification IDs (keep recent ones)
             new_ids = [
                 n.notification_id for n in new_notifications if n.notification_id
             ]
@@ -140,10 +129,8 @@ async def _check_notifications_async(
                     -QueueLimits.PROCESSED_NOTIFICATION_IDS :
                 ]
 
-            # Update last check time
             state.last_notification_check_time = datetime.now(timezone.utc)
 
-            # Save state
             await save_state(state)
 
             logger.info(
@@ -154,12 +141,10 @@ async def _check_notifications_async(
                 },
             )
         else:
-            # Still update last check time even if no new notifications
             state.last_notification_check_time = datetime.now(timezone.utc)
             await save_state(state)
             logger.info("no_new_notifications")
 
-        # Log action
         await log_action(f"Checked notifications ({len(new_notifications)} new)")
 
         logger.info("notification_checking_completed_successfully")

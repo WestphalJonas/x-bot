@@ -85,13 +85,12 @@ class LLMClient:
         self.max_tokens = config.llm.max_tokens
         self.temperature = config.llm.temperature
 
-        # Initialize clients for each provider
+        # Create clients up front so fallback order reuses the same connections
         self.openai_client: AsyncOpenAI | None = None
         self.openrouter_client: AsyncOpenAI | None = None
         self.google_model: Any = None
         self.anthropic_client: Any = None
 
-        # Store API keys for providers that need them per-request
         self._google_api_key = google_api_key
 
         if openai_api_key:
@@ -104,7 +103,7 @@ class LLMClient:
 
         if google_api_key and GOOGLE_AVAILABLE and genai is not None:
             genai.configure(api_key=google_api_key)
-            # Use the model from config or default to gemini-1.5-flash
+            # Resolve Gemini model once so we don't recompute it per request
             google_model_name = self._get_google_model_name()
             self.google_model = genai.GenerativeModel(google_model_name)
             logger.info("google_client_initialized", extra={"model": google_model_name})
@@ -218,7 +217,7 @@ class LLMClient:
                 continue
 
             try:
-                # Handle Google and Anthropic separately
+                # Native clients use provider-specific paths; OpenAI-compatible ones share the same flow
                 if provider == "google":
                     tweet = await self._generate_with_google(
                         system_prompt, user_prompt, "generate"
@@ -326,7 +325,7 @@ class LLMClient:
                 continue
 
             try:
-                # Handle Google and Anthropic separately
+                # Native clients use provider-specific paths; OpenAI-compatible ones share the same flow
                 if provider == "google":
                     tweet = await self._generate_with_google(
                         system_prompt, user_prompt, "inspiration"
@@ -404,12 +403,7 @@ class LLMClient:
                 max_tweet_length=self.config.personality.max_tweet_length,
             )
 
-        # For OpenRouter, we might need to adjust the model name
         model = self.model
-        if provider == "openrouter":
-            # OpenRouter model names might need prefix, but many work as-is
-            # You can customize this if needed
-            pass
 
         response = await client.chat.completions.create(
             model=model,
@@ -480,10 +474,9 @@ class LLMClient:
         if not self.google_model or not GOOGLE_AVAILABLE:
             raise RuntimeError("Google Gemini client not available")
 
-        # Combine system and user prompts for Gemini
+        # Gemini expects a single prompt string; combine system + user content
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-        # Generate content using Gemini
         response = await self.google_model.generate_content_async(
             full_prompt,
             generation_config={
@@ -504,11 +497,10 @@ class LLMClient:
             },
         )
 
-        # Log to dashboard tracker (Google doesn't provide detailed token counts)
         try:
             from src.web.data_tracker import log_token_usage
 
-            # Estimate tokens (rough approximation)
+            # Gemini doesn't return token counts; approximate for analytics only
             prompt_tokens = len(full_prompt) // 4
             completion_tokens = len(tweet) // 4
 
@@ -564,7 +556,6 @@ class LLMClient:
 
         tweet = response.content[0].text.strip()
 
-        # Log token usage
         logger.info(
             "llm_call",
             extra={
@@ -577,7 +568,6 @@ class LLMClient:
             },
         )
 
-        # Log to dashboard tracker
         try:
             from src.web.data_tracker import log_token_usage
 
@@ -603,7 +593,7 @@ class LLMClient:
         Returns:
             Tuple of (is_valid, error_message)
         """
-        # Length check
+        # Fast length guard before running more expensive checks
         tweet_length = len(tweet)
         min_length = self.config.personality.min_tweet_length
         max_length = self.config.personality.max_tweet_length
@@ -614,7 +604,6 @@ class LLMClient:
         if tweet_length > max_length:
             return False, f"Tweet too long: {tweet_length} chars (max: {max_length})"
 
-        # Basic quality checks
         if not tweet.strip():
             return False, "Tweet is empty"
 
@@ -640,10 +629,9 @@ class LLMClient:
             tweet=tweet,
         )
 
-        # Use the primary provider for brand check
+        # Prefer the configured provider; fall back to the first available client
         client = self._get_client(self.config.llm.provider)
         if not client:
-            # Fallback to first available client
             client = self.openai_client or self.openrouter_client
 
         if not client:

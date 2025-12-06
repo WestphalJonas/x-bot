@@ -61,10 +61,8 @@ async def dashboard(
     """Main dashboard overview page."""
     templates = request.app.state.templates
 
-    # Get state for overview stats
     state = await load_state()
 
-    # Get SQLite stats
     db_stats = None
     try:
         db = await get_database()
@@ -72,7 +70,6 @@ async def dashboard(
     except Exception:
         pass
 
-    # Merge with ChromaDB stats if available
     if memory is not None:
         try:
             chroma_stats = memory.get_stats()
@@ -83,7 +80,6 @@ async def dashboard(
         except Exception:
             pass
 
-    # Get job queue status
     job_queue = get_job_queue()
     job_queue_info = {
         "size": job_queue.size(),
@@ -144,9 +140,6 @@ async def settings_page(request: Request, config: ConfigDep) -> HTMLResponse:
     )
 
 
-# HTMX partial routes for dynamic content loading
-
-
 @router.get("/partials/posts/read", response_class=HTMLResponse)
 async def posts_read_partial(request: Request, page: int = 1) -> HTMLResponse:
     """Partial for read posts list (HTMX)."""
@@ -155,7 +148,6 @@ async def posts_read_partial(request: Request, page: int = 1) -> HTMLResponse:
     posts = []
     total = 0
 
-    # Pagination settings
     per_page = 20
     page = max(1, page)
     offset = (page - 1) * per_page
@@ -184,7 +176,6 @@ async def posts_read_partial(request: Request, page: int = 1) -> HTMLResponse:
     except Exception:
         pass
 
-    # Calculate pagination info
     total_pages = max(1, (total + per_page - 1) // per_page)
     has_prev = page > 1
     has_next = page < total_pages
@@ -196,7 +187,6 @@ async def posts_read_partial(request: Request, page: int = 1) -> HTMLResponse:
             "posts": posts,
             "total": total,
             "post_type": "read",
-            # Pagination
             "page": page,
             "total_pages": total_pages,
             "has_prev": has_prev,
@@ -214,7 +204,6 @@ async def posts_written_partial(request: Request, page: int = 1) -> HTMLResponse
     tweets = []
     total = 0
 
-    # Pagination settings
     per_page = 20
     page = max(1, page)
     offset = (page - 1) * per_page
@@ -235,7 +224,6 @@ async def posts_written_partial(request: Request, page: int = 1) -> HTMLResponse
     except Exception:
         pass
 
-    # Calculate pagination info
     total_pages = max(1, (total + per_page - 1) // per_page)
     has_prev = page > 1
     has_next = page < total_pages
@@ -247,7 +235,6 @@ async def posts_written_partial(request: Request, page: int = 1) -> HTMLResponse
             "tweets": tweets,
             "total": total,
             "tweet_type": "written",
-            # Pagination
             "page": page,
             "total_pages": total_pages,
             "has_prev": has_prev,
@@ -265,7 +252,6 @@ async def posts_rejected_partial(request: Request, page: int = 1) -> HTMLRespons
     tweets = []
     total = 0
 
-    # Pagination settings
     per_page = 20
     page = max(1, page)
     offset = (page - 1) * per_page
@@ -287,7 +273,6 @@ async def posts_rejected_partial(request: Request, page: int = 1) -> HTMLRespons
     except Exception:
         pass
 
-    # Calculate pagination info
     total_pages = max(1, (total + per_page - 1) // per_page)
     has_prev = page > 1
     has_next = page < total_pages
@@ -298,7 +283,6 @@ async def posts_rejected_partial(request: Request, page: int = 1) -> HTMLRespons
             "request": request,
             "tweets": tweets,
             "total": total,
-            # Pagination
             "page": page,
             "total_pages": total_pages,
             "has_prev": has_prev,
@@ -316,7 +300,6 @@ async def posts_interested_partial(request: Request, page: int = 1) -> HTMLRespo
     posts = []
     total = 0
 
-    # Pagination settings
     per_page = 20
     page = max(1, page)
     offset = (page - 1) * per_page
@@ -326,7 +309,6 @@ async def posts_interested_partial(request: Request, page: int = 1) -> HTMLRespo
         queue = state.interesting_posts_queue
 
         total = len(queue)
-        # Slice the queue for pagination
         page_items = queue[offset : offset + per_page]
 
         for post_data in page_items:
@@ -349,7 +331,6 @@ async def posts_interested_partial(request: Request, page: int = 1) -> HTMLRespo
     except Exception:
         pass
 
-    # Calculate pagination info
     total_pages = max(1, (total + per_page - 1) // per_page)
     has_prev = page > 1
     has_next = page < total_pages
@@ -360,7 +341,6 @@ async def posts_interested_partial(request: Request, page: int = 1) -> HTMLRespo
             "request": request,
             "posts": posts,
             "total": total,
-            # Pagination
             "page": page,
             "total_pages": total_pages,
             "has_prev": has_prev,
@@ -390,7 +370,6 @@ async def analytics_tokens_partial(
     total_entries = 0
     hourly_data: list[dict[str, Any]] = []
 
-    # Pagination settings
     per_page = 20
     page = max(1, page)  # Ensure page is at least 1
     offset = (page - 1) * per_page
@@ -418,13 +397,11 @@ async def analytics_tokens_partial(
                 }
             )
 
-        # Get hourly data for the chart (last 24 hours)
         hourly_raw = await db.get_hourly_token_usage(hours=24)
         hourly_data = [{"hour": h["hour"], "tokens": h["tokens"]} for h in hourly_raw]
     except Exception:
         pass
 
-    # Calculate pagination info
     total_pages = max(1, (total_entries + per_page - 1) // per_page)
     has_prev = page > 1
     has_next = page < total_pages
@@ -439,7 +416,6 @@ async def analytics_tokens_partial(
             "tokens_by_provider": tokens_by_provider,
             "tokens_by_operation": tokens_by_operation,
             "hourly_data": hourly_data,
-            # Pagination
             "page": page,
             "per_page": per_page,
             "total_pages": total_pages,

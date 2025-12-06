@@ -54,18 +54,17 @@ class ChromaMemory:
         self.config = config
         self.embedding_model = config.llm.embedding_model
         self.similarity_threshold = config.llm.similarity_threshold
-        
-        # OpenAI client for embeddings
-        # Disable built-in retries - we handle retries ourselves with tenacity
+
+        # OpenAI client for embeddings (retry handled by tenacity, so disable SDK retries)
         self.openai_client = AsyncOpenAI(api_key=openai_api_key, max_retries=0)
-        
+
         # Ensure persist directory exists
         Path(persist_directory).mkdir(parents=True, exist_ok=True)
-        
+
         # Initialize ChromaDB with persistent storage
         self.chroma_client = chromadb.PersistentClient(path=persist_directory)
-        
-        # Get or create collections
+
+        # Collections are namespaced for tweets vs read posts
         self.tweets_collection = self.chroma_client.get_or_create_collection(
             name="tweets",
             metadata={"description": "All posted tweets"}
@@ -144,7 +143,6 @@ class ChromaMemory:
         """
         text_hash = self._hash_text(text)
         
-        # Check cache first (in tweets collection)
         try:
             results = self.tweets_collection.get(
                 ids=[text_hash],
@@ -161,7 +159,6 @@ class ChromaMemory:
         except Exception:
             pass  # Cache miss, get from API
         
-        # Get from API
         logger.info("embedding_cache_miss", extra={"text_hash": text_hash})
         embedding = await self._get_embedding_from_api(text)
         
