@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000" id="theme-color-meta">
+    <meta name="color-scheme" content="dark light">
+    <title>Login - X Bot</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/styles.css">
+    
+    <!-- Theme initialization (prevent flash) -->
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 
+                (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+            document.documentElement.setAttribute('data-theme', theme);
+            document.getElementById('theme-color-meta').content = theme === 'dark' ? '#000000' : '#ffffff';
+        })();
+    </script>
+    
+    <style>
+        .login-page {
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+            background: var(--bg-primary);
+        }
+        
+        .login-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 32px;
+            text-decoration: none;
+        }
+        
+        .login-logo-icon {
+            font-size: 42px;
+            font-weight: 800;
+            color: var(--text-primary);
+            line-height: 1;
+        }
+        
+        .login-logo-text {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        .login-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            width: 100%;
+            max-width: 400px;
+            overflow: hidden;
+        }
+        
+        .login-header {
+            padding: 24px 24px 0;
+            text-align: center;
+        }
+        
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 8px 0;
+        }
+        
+        .login-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+        
+        .login-form {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .login-error {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            background: rgba(244, 33, 46, 0.1);
+            border: 1px solid rgba(244, 33, 46, 0.3);
+            border-radius: var(--radius-md);
+            color: var(--accent-red);
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .login-error-icon {
+            flex-shrink: 0;
+        }
+        
+        .login-submit {
+            margin-top: 8px;
+        }
+        
+        .login-submit .btn {
+            width: 100%;
+            height: 44px;
+            font-size: 15px;
+        }
+        
+        .login-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .theme-toggle-login {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-full);
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background var(--transition-fast), color var(--transition-fast);
+        }
+        
+        .theme-toggle-login:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .theme-toggle-login .icon-sun,
+        .theme-toggle-login .icon-moon {
+            display: none;
+        }
+
+        [data-theme="dark"] .theme-toggle-login .icon-sun {
+            display: block;
+        }
+
+        [data-theme="light"] .theme-toggle-login .icon-moon {
+            display: block;
+        }
+        
+        @media (max-width: 480px) {
+            .login-card {
+                border-radius: var(--radius-md);
+            }
+            
+            .login-header {
+                padding: 20px 20px 0;
+            }
+            
+            .login-form {
+                padding: 20px;
+            }
+            
+            .login-footer {
+                padding: 14px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-page">
+        <a href="/" class="login-logo">
+            <span class="login-logo-icon">𝕏</span>
+            <span class="login-logo-text">Bot</span>
+        </a>
+        
+        <div class="login-card">
+            <div class="login-header">
+                <h1 class="login-title">Welcome back</h1>
+                <p class="login-subtitle">Sign in to access the dashboard</p>
+            </div>
+            
+            <form method="post" action="/login" class="login-form">
+                <input type="hidden" name="next_path" value="{{ next_path }}">
+                
+                {% if error %}
+                <div class="login-error">
+                    <svg class="login-error-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm-1-7v2h2v-2h-2zm0-8v6h2V7h-2z"/>
+                    </svg>
+                    <span>Invalid username or password</span>
+                </div>
+                {% endif %}
+                
+                <div class="form-group">
+                    <label class="form-label" for="username">Username</label>
+                    <input 
+                        class="form-input" 
+                        id="username" 
+                        name="username" 
+                        type="text" 
+                        autocomplete="username" 
+                        placeholder="Enter your username"
+                        required
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input 
+                        class="form-input" 
+                        id="password" 
+                        name="password" 
+                        type="password" 
+                        autocomplete="current-password" 
+                        placeholder="Enter your password"
+                        required
+                    >
+                </div>
+                
+                <div class="login-submit">
+                    <button type="submit" class="btn btn-primary">Sign in</button>
+                </div>
+            </form>
+            
+            <div class="login-footer">
+                <button class="theme-toggle-login" id="theme-toggle-login" aria-label="Toggle theme">
+                    <span class="icon-sun">☀️</span>
+                    <span class="icon-moon">🌙</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Focus username input
+        document.addEventListener('DOMContentLoaded', () => {
+            const userInput = document.getElementById('username');
+            if (userInput) userInput.focus();
+        });
+        
+        // Theme toggle
+        (function() {
+            const toggle = document.getElementById('theme-toggle-login');
+            const meta = document.getElementById('theme-color-meta');
+            
+            function setTheme(theme) {
+                document.documentElement.setAttribute('data-theme', theme);
+                localStorage.setItem('theme', theme);
+                meta.content = theme === 'dark' ? '#000000' : '#ffffff';
+            }
+            
+            toggle.addEventListener('click', () => {
+                const current = document.documentElement.getAttribute('data-theme');
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
+        })();
+    </script>
+</body>
+</html>
+
