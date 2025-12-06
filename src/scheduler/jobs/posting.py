@@ -4,38 +4,30 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from openai import AuthenticationError, RateLimitError
-
 from src.core.config import BotConfig, EnvSettings
-from src.core.evaluation import re_evaluate_tweet
+from src.core.graph.tweet_generation import (
+    GenerationDependencies,
+    TweetGenerationState,
+    build_tweet_generation_graph,
+)
 from src.core.llm import LLMClient
+from src.memory.chroma_client import ChromaMemory
 from src.state.manager import load_state, save_state
 from src.web.data_tracker import log_action, log_rejected_tweet, log_written_tweet
 from src.x.posting import post_tweet
 from src.x.session import AsyncTwitterSession
 
-from src.memory.chroma_client import ChromaMemory
-
 logger = logging.getLogger(__name__)
 
 
 def post_autonomous_tweet(config: BotConfig, env_settings: EnvSettings) -> None:
-    """Post an autonomous tweet (scheduled job).
-
-    This function wraps async operations for APScheduler compatibility.
-    Extracted from main.py posting logic.
-
-    Args:
-        config: Bot configuration
-        env_settings: Dictionary with environment variables (API keys, credentials)
-    """
+    """Post an autonomous tweet (scheduled job)."""
     job_id = "post_tweet"
     logger.info("job_started", extra={"job_id": job_id})
 
     try:
         asyncio.run(_post_autonomous_tweet_async(config, env_settings))
         logger.info("job_completed", extra={"job_id": job_id})
-
     except Exception as e:
         logger.error(
             "job_failed",
@@ -51,16 +43,8 @@ def post_autonomous_tweet(config: BotConfig, env_settings: EnvSettings) -> None:
 async def _post_autonomous_tweet_async(
     config: BotConfig, env_settings: EnvSettings
 ) -> None:
-    """Async implementation of autonomous tweet posting.
-
-    Args:
-        config: Bot configuration
-        env_settings: Dictionary with environment variables
-    """
-    # Respect daily limit before spending tokens
-    state = await load_state(
-        reset_time_utc=config.rate_limits.reset_time_utc,
-    )
+    """Async implementation of autonomous tweet posting."""
+    state = await load_state(reset_time_utc=config.rate_limits.reset_time_utc)
 
     if state.counters["posts_today"] >= config.rate_limits.max_posts_per_day:
         logger.warning(
@@ -72,188 +56,83 @@ async def _post_autonomous_tweet_async(
         )
         return
 
-    # Pull credentials up front so we can fail fast
-    openai_api_key = env_settings.get("OPENAI_API_KEY")
-    openrouter_api_key = env_settings.get("OPENROUTER_API_KEY")
-    twitter_username = env_settings.get("TWITTER_USERNAME")
-    twitter_password = env_settings.get("TWITTER_PASSWORD")
+    # Validate credentials
+    if not env_settings.get("TWITTER_USERNAME") or not env_settings.get("TWITTER_PASSWORD"):
+        raise ValueError("TWITTER_USERNAME and TWITTER_PASSWORD are required")
 
-    # Validate that at least one LLM provider is configured
-    if not openai_api_key and not openrouter_api_key:
-        raise ValueError(
-            "At least one LLM provider API key is required. "
-            "Please set OPENAI_API_KEY or OPENROUTER_API_KEY in your .env file."
-        )
-    if not twitter_username:
-        raise ValueError("TWITTER_USERNAME environment variable is required")
-    if not twitter_password:
-        raise ValueError("TWITTER_PASSWORD environment variable is required")
-
-    google_api_key = env_settings.get("GOOGLE_API_KEY")
-    anthropic_api_key = env_settings.get("ANTHROPIC_API_KEY")
-
-    llm_client = LLMClient(
-        config=config,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        google_api_key=google_api_key,
-        anthropic_api_key=anthropic_api_key,
+    # Ensure at least one LLM provider
+    has_provider = any(
+        [
+            env_settings.get("OPENAI_API_KEY"),
+            env_settings.get("OPENROUTER_API_KEY"),
+            env_settings.get("GOOGLE_API_KEY"),
+            env_settings.get("ANTHROPIC_API_KEY"),
+        ]
     )
+    if not has_provider:
+        raise ValueError("At least one LLM provider API key is required.")
+
+    llm_client = LLMClient(config=config, env_settings=env_settings)
+
+    chroma_memory: ChromaMemory | None = None
+    try:
+        chroma_memory = ChromaMemory(config=config, llm_client=llm_client._client)
+    except Exception as exc:
+        logger.warning("chroma_unavailable", extra={"error": str(exc)})
 
     system_prompt = config.get_system_prompt()
+    graph = build_tweet_generation_graph(
+        GenerationDependencies(llm_client=llm_client, memory=chroma_memory)
+    )
 
-    logger.info("generating_tweet")
-    try:
-        tweet_text = await llm_client.generate_tweet(system_prompt)
-        logger.info("tweet_generated", extra={"length": len(tweet_text)})
-    except AuthenticationError as e:
-        logger.error(
-            "tweet_generation_failed_auth",
-            extra={
-                "error": str(e),
-                "detail": "Authentication failed. Please check your API keys in .env file.",
-            },
-        )
-        raise
-    except RateLimitError as e:
-        logger.error(
-            "tweet_generation_failed_rate_limit",
-            extra={
-                "error": str(e),
-                "detail": "Rate limit or quota exceeded. Please check your account billing or wait before retrying.",
-            },
-        )
-        raise
-    except Exception as e:
-        logger.error("tweet_generation_failed", extra={"error": str(e)}, exc_info=True)
-        raise
+    result_state = await graph.ainvoke(TweetGenerationState(system_prompt=system_prompt))
 
-    # Avoid posting duplicates if memory is available
-    chroma_memory = None
-    if openai_api_key:
-        try:
-            chroma_memory = ChromaMemory(
-                config=config,
-                openai_api_key=openai_api_key,
-            )
-            is_duplicate, similarity = await chroma_memory.check_duplicate(tweet_text)
-            if is_duplicate:
-                logger.warning(
-                    "duplicate_tweet_detected",
-                    extra={
-                        "similarity": similarity,
-                        "threshold": config.llm.similarity_threshold,
-                    },
-                )
-                logger.info("regenerating_tweet_due_to_duplicate")
-                tweet_text = await llm_client.generate_tweet(system_prompt)
-                is_duplicate, similarity = await chroma_memory.check_duplicate(
-                    tweet_text
-                )
-                if is_duplicate:
-                    raise ValueError(
-                        f"Generated tweet is too similar to existing content (similarity: {similarity:.2f})"
-                    )
-        except ValueError:
-            raise  # Re-raise duplicate error
-        except Exception as e:
-            logger.warning(
-                "chroma_duplicate_check_failed",
-                extra={"error": str(e)},
-            )
-            # Continue without duplicate check if ChromaDB fails
+    def _field(name: str):
+        if hasattr(result_state, name):
+            return getattr(result_state, name)
+        if isinstance(result_state, dict):
+            return result_state.get(name)
+        return None
 
-    # Lightweight local validation before LLM gatekeeping
+    tweet_text = _field("tweet_text")
+    approved = _field("approved")
+    reason = _field("reason")
+
+    if not tweet_text:
+        raise ValueError("Generation graph returned no tweet text")
+
     is_valid, error_message = await llm_client.validate_tweet(tweet_text)
     if not is_valid:
-        logger.error("tweet_validation_failed", extra={"error": error_message})
-        try:
-            await log_rejected_tweet(
-                text=tweet_text,
-                reason=error_message,
-                operation="autonomous",
-            )
-            logger.info("rejected_tweet_saved", extra={"reason": error_message})
-        except Exception as save_error:
-            logger.error(
-                "failed_to_save_rejected_tweet",
-                extra={"error": str(save_error)},
-                exc_info=True,
-            )
+        await log_rejected_tweet(text=tweet_text, reason=error_message, operation="autonomous")
         raise ValueError(f"Tweet validation failed: {error_message}")
 
-    approved, evaluation_reason = await re_evaluate_tweet(
-        tweet_text=tweet_text,
-        config=config,
-        llm_client=llm_client,
-        operation="autonomous",
-    )
-    if not approved:
-        logger.error("tweet_re_evaluation_failed", extra={"reason": evaluation_reason})
-        try:
-            await log_rejected_tweet(
-                text=tweet_text,
-                reason=evaluation_reason,
-                operation="autonomous",
-            )
-        except Exception as save_error:
-            logger.error(
-                "failed_to_save_rejected_tweet",
-                extra={"error": str(save_error)},
-                exc_info=True,
-            )
-        raise ValueError(f"Tweet re-evaluation failed: {evaluation_reason}")
+    if approved is False:
+        await log_rejected_tweet(text=tweet_text, reason=reason or "Not approved", operation="autonomous")
+        raise ValueError(f"Tweet re-evaluation failed: {reason}")
 
-    logger.info(
-        "tweet_validated",
-        extra={"length": len(tweet_text), "approved": approved},
-    )
+    username = env_settings.get("TWITTER_USERNAME")
+    password = env_settings.get("TWITTER_PASSWORD")
 
-    try:
-        async with AsyncTwitterSession(
-            config, twitter_username, twitter_password
-        ) as driver:
-            logger.info("posting_tweet")
-            post_success = post_tweet(driver, tweet_text, config)
-            if not post_success:
-                logger.error("tweet_post_failed")
-                raise RuntimeError("Tweet posting failed")
+    async with AsyncTwitterSession(config, username, password) as driver:
+        logger.info("posting_tweet")
+        post_success = post_tweet(driver, tweet_text, config)
+        if not post_success:
+            raise RuntimeError("Tweet posting failed")
 
-            await log_written_tweet(
-                text=tweet_text,
-                tweet_type="autonomous",
-            )
+        await log_written_tweet(text=tweet_text, tweet_type="autonomous")
 
-            if chroma_memory:
-                try:
-                    await chroma_memory.store_tweet(
-                        text=tweet_text,
-                        metadata={"type": "autonomous"},
-                    )
-                    logger.info("tweet_stored_in_memory")
-                except Exception as e:
-                    logger.warning(
-                        "failed_to_store_tweet_in_memory",
-                        extra={"error": str(e)},
-                    )
-
-            state.counters["posts_today"] += 1
-            state.last_post_time = datetime.now(timezone.utc)
-
-            await save_state(state)
-            logger.info(
-                "state_updated", extra={"posts_today": state.counters["posts_today"]}
-            )
-
-            await log_action("Posted autonomous tweet")
-
-            logger.info("bot_completed_successfully")
-
-    except Exception as e:
-        logger.error("bot_error", extra={"error": str(e)}, exc_info=True)
-        raise
-
-    finally:
         if chroma_memory:
-            await chroma_memory.close()
-        await llm_client.close()
+            try:
+                await chroma_memory.store_tweet(
+                    text=tweet_text,
+                    metadata={"type": "autonomous"},
+                )
+            except Exception as e:
+                logger.warning("failed_to_store_tweet_in_memory", extra={"error": str(e)})
+
+        state.counters["posts_today"] += 1
+        state.last_post_time = datetime.now(timezone.utc)
+        await save_state(state)
+        await log_action("Posted autonomous tweet")
+
+    await llm_client.close()

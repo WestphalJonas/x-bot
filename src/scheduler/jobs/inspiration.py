@@ -89,17 +89,16 @@ async def _process_inspiration_queue_async(
         extra={"queue_size": queue_size},
     )
 
-    # Pull credentials up front so we can fail fast
-    openai_api_key = env_settings.get("OPENAI_API_KEY")
-    openrouter_api_key = env_settings.get("OPENROUTER_API_KEY")
-    google_api_key = env_settings.get("GOOGLE_API_KEY")
-    anthropic_api_key = env_settings.get("ANTHROPIC_API_KEY")
     twitter_username = env_settings.get("TWITTER_USERNAME")
     twitter_password = env_settings.get("TWITTER_PASSWORD")
 
-    # Validate that at least one LLM provider is configured
     has_llm_provider = any(
-        [openai_api_key, openrouter_api_key, google_api_key, anthropic_api_key]
+        [
+            env_settings.get("OPENAI_API_KEY"),
+            env_settings.get("OPENROUTER_API_KEY"),
+            env_settings.get("GOOGLE_API_KEY"),
+            env_settings.get("ANTHROPIC_API_KEY"),
+        ]
     )
     if not has_llm_provider:
         logger.warning(
@@ -113,30 +112,20 @@ async def _process_inspiration_queue_async(
     if not twitter_password:
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
-    llm_client = LLMClient(
-        config=config,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        google_api_key=google_api_key,
-        anthropic_api_key=anthropic_api_key,
-    )
+    llm_client = LLMClient(config=config, env_settings=env_settings)
 
     posts_batch_dicts = state.interesting_posts_queue[:threshold]
     posts_batch = [Post(**p) for p in posts_batch_dicts]
 
     # Duplicate checks only run when embeddings are available
     chroma_memory = None
-    if openai_api_key:
-        try:
-            chroma_memory = ChromaMemory(
-                config=config,
-                openai_api_key=openai_api_key,
-            )
-        except Exception as e:
-            logger.warning(
-                "chroma_init_failed",
-                extra={"error": str(e)},
-            )
+    try:
+        chroma_memory = ChromaMemory(config=config, llm_client=llm_client._client)
+    except Exception as e:
+        logger.warning(
+            "chroma_init_failed",
+            extra={"error": str(e)},
+        )
 
     max_attempts = 3
     tweet_text = None
@@ -294,6 +283,4 @@ async def _process_inspiration_queue_async(
         raise
 
     finally:
-        if chroma_memory:
-            await chroma_memory.close()
         await llm_client.close()

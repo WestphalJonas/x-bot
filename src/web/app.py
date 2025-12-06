@@ -41,7 +41,7 @@ def get_config() -> BotConfig:
 
 
 @lru_cache
-def get_chroma_memory() -> "ChromaMemory | None":
+def get_chroma_memory() -> object | None:
     """Get the ChromaDB memory client if available.
 
     Uses lru_cache to ensure only one memory client instance is created.
@@ -65,7 +65,7 @@ def get_chroma_memory() -> "ChromaMemory | None":
 
 # Type aliases for dependency injection
 ConfigDep = Annotated[BotConfig, Depends(get_config)]
-ChromaMemoryDep = Annotated["ChromaMemory | None", Depends(get_chroma_memory)]
+ChromaMemoryDep = Annotated[object | None, Depends(get_chroma_memory)]
 
 
 @asynccontextmanager

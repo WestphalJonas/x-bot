@@ -20,6 +20,9 @@ class EnvSettings(TypedDict, total=False):
     ANTHROPIC_API_KEY: str | None
     TWITTER_USERNAME: str | None
     TWITTER_PASSWORD: str | None
+    LANGCHAIN_API_KEY: str | None
+    LANGCHAIN_PROJECT: str | None
+    LANGCHAIN_TRACING_V2: str | None
 
 
 class RateLimitsConfig(BaseModel):

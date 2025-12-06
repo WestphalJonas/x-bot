@@ -13,11 +13,11 @@
   - Environment variable support
 
 - ✅ **LLM Integration** (`src/core/llm.py`)
-  - Multi-provider support (OpenAI, OpenRouter)
-  - Automatic fallback mechanism
+  - LangChain-based multi-provider support (OpenAI, OpenRouter, Google, Anthropic)
+  - Automatic fallback mechanism with token logging
   - Tweet generation and validation
   - Brand alignment checking
-  - Note: Google and Anthropic providers not yet implemented (only OpenAI and OpenRouter)
+  - LangGraph flows for generation, reading, and notifications
 
 - ✅ **State Management** (`src/state/`)
   - JSON-based state persistence (`data/state.json`)
@@ -462,7 +462,7 @@
 - ✅ Token counting implemented (SQLite database with analytics)
 - ✅ Web dashboard implemented (FastAPI + HTMX + Chart.js)
 - ✅ ChromaDB memory integration for duplicate detection
-- LLM client needs embedding support (currently only generation)
+- ✅ LLM layer migrated to LangChain/LangGraph with embeddings
 - State management needs counter reset logic (midnight UTC)
 - Error handling improved with graceful job failure handling
 - Tweet re-evaluation before posting implemented
