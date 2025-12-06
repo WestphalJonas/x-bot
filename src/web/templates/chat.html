@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - X Bot{% endblock %}
+{% block page_title %}Chat{% endblock %}
+
+{% block header_actions %}
+<button class="btn btn-secondary" id="chat-clear-btn">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+    </svg>
+    Clear
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="chat-container">
+    <!-- Toast Notification -->
+    <div id="chat-toast" class="toast hidden">
+        <span class="toast-icon">✓</span>
+        <span class="toast-message">Message sent</span>
+    </div>
+
+    <!-- Model Info -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2 class="section-title">💬 Agent Chat</h2>
+            <p class="section-description">Draft content manually using the configured model</p>
+        </div>
+        <div class="section-content">
+            <div class="config-grid">
+                <div class="config-item">
+                    <span class="config-label">Provider</span>
+                    <span class="config-value">{{ config.llm.provider }}</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">Model</span>
+                    <span class="config-value font-mono">{{ config.llm.model }}</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">Tone</span>
+                    <span class="config-value">{{ config.personality.tone | capitalize }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Window -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2 class="section-title">Conversation</h2>
+        </div>
+        <div class="section-content">
+            <div id="chat-window" class="chat-messages" aria-live="polite">
+                <div class="chat-message chat-message-assistant">
+                    <div class="chat-avatar">🤖</div>
+                    <div class="chat-bubble">
+                        <div class="chat-text">Hi! I'm ready to help draft content. Share your idea and I'll create options using the configured personality.</div>
+                        <div class="chat-info">Agent</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Input Form -->
+    <div class="section-card">
+        <div class="section-content">
+            <form id="chat-form" class="chat-input-form">
+                <div class="form-group">
+                    <label class="form-label" for="chat-input">Your Message</label>
+                    <textarea 
+                        id="chat-input" 
+                        name="message" 
+                        class="form-input" 
+                        rows="3" 
+                        placeholder="Ask the agent to draft a tweet, generate ideas, or refine content..."
+                        required
+                    ></textarea>
+                </div>
+                <div class="chat-form-actions">
+                    <div id="chat-status" class="chat-status-text"></div>
+                    <button type="submit" class="btn btn-primary" id="chat-send-btn">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                        </svg>
+                        Send
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('chat-input');
+    const windowEl = document.getElementById('chat-window');
+    const statusEl = document.getElementById('chat-status');
+    const sendBtn = document.getElementById('chat-send-btn');
+    const clearBtn = document.getElementById('chat-clear-btn');
+    const toast = document.getElementById('chat-toast');
+
+    const messages = [{
+        role: 'assistant',
+        text: "Hi! I'm ready to help draft content. Share your idea and I'll create options using the configured personality.",
+        meta: 'Agent'
+    }];
+
+    function showToast(message, isError = false) {
+        const msgSpan = toast.querySelector('.toast-message');
+        const iconSpan = toast.querySelector('.toast-icon');
+        
+        msgSpan.textContent = message;
+        iconSpan.textContent = isError ? '✗' : '✓';
+        toast.classList.toggle('toast-error', isError);
+        toast.classList.remove('hidden');
+        
+        setTimeout(() => {
+            toast.classList.add('hidden');
+        }, 3000);
+    }
+
+    function renderMessages() {
+        windowEl.innerHTML = '';
+        messages.forEach(({ role, text, meta }) => {
+            const msg = document.createElement('div');
+            msg.className = `chat-message chat-message-${role}`;
+
+            const avatar = document.createElement('div');
+            avatar.className = 'chat-avatar';
+            avatar.textContent = role === 'user' ? '👤' : '🤖';
+            msg.appendChild(avatar);
+
+            const bubble = document.createElement('div');
+            bubble.className = 'chat-bubble';
+
+            const textEl = document.createElement('div');
+            textEl.className = 'chat-text';
+            textEl.textContent = text;
+            bubble.appendChild(textEl);
+
+            if (meta) {
+                const metaEl = document.createElement('div');
+                metaEl.className = 'chat-info';
+                metaEl.textContent = meta;
+                bubble.appendChild(metaEl);
+            }
+
+            msg.appendChild(bubble);
+            windowEl.appendChild(msg);
+        });
+        windowEl.scrollTop = windowEl.scrollHeight;
+    }
+
+    function setStatus(text, isError = false) {
+        if (!text) {
+            statusEl.textContent = '';
+            statusEl.classList.remove('error');
+            return;
+        }
+        statusEl.textContent = text;
+        statusEl.classList.toggle('error', isError);
+    }
+
+    async function sendMessage(event) {
+        event.preventDefault();
+        const content = input.value.trim();
+        if (!content) return;
+
+        messages.push({ role: 'user', text: content });
+        renderMessages();
+        setStatus('Generating response...');
+        sendBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: content })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || 'Chat failed');
+            }
+
+            const meta = `${data.provider} · ${data.total_tokens} tokens`;
+            messages.push({ role: 'assistant', text: data.reply, meta });
+            setStatus('');
+            showToast('Response received');
+            renderMessages();
+        } catch (error) {
+            console.error('Chat error', error);
+            setStatus('', false);
+            showToast(error.message || 'Request failed', true);
+        } finally {
+            sendBtn.disabled = false;
+            input.value = '';
+            input.focus();
+        }
+    }
+
+    function clearChat() {
+        messages.splice(0, messages.length, {
+            role: 'assistant',
+            text: 'Chat cleared. Share your next idea to begin.',
+            meta: 'Agent'
+        });
+        renderMessages();
+        setStatus('');
+        showToast('Chat cleared');
+        input.focus();
+    }
+
+    form.addEventListener('submit', sendMessage);
+    clearBtn.addEventListener('click', clearChat);
+    renderMessages();
+})();
+</script>
+{% endblock %}

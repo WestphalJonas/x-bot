@@ -5,6 +5,7 @@ from typing import Any
 
 from src.state.database import get_database
 from src.state.manager import load_state, save_state
+from src.monitoring.token_logging import log_token_usage as core_log_token_usage
 
 
 async def log_token_usage(
@@ -15,18 +16,8 @@ async def log_token_usage(
     total_tokens: int,
     operation: str,
 ) -> None:
-    """Log token usage for analytics.
-
-    Args:
-        provider: LLM provider name
-        model: Model name used
-        prompt_tokens: Number of prompt tokens
-        completion_tokens: Number of completion tokens
-        total_tokens: Total tokens used
-        operation: Operation type (generate, validate, interest_check, etc.)
-    """
-    db = await get_database()
-    await db.log_token_usage(
+    """Log token usage for analytics (delegates to core helper)."""
+    await core_log_token_usage(
         provider=provider,
         model=model,
         prompt_tokens=prompt_tokens,

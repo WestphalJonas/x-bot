@@ -29,11 +29,11 @@ rate_limits:
 scheduler:
   event_check_minutes: 15
   inspiration_batch_size: 20
-  inspiration_check_minutes: 5
+  inspiration_check_minutes: 60
   mention_check_minutes: 30
   post_interval_hours: 2.0
   post_jitter_hours: 1.0
-  reading_check_minutes: 5
+  reading_check_minutes: 30
 selenium:
   headless: true
   max_delay_seconds: 3.0

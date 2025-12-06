@@ -1,21 +1,21 @@
 """API routes for the X bot dashboard."""
 
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential
 
-from src.core.config import BotConfig
+from src.core.config import BotConfig, EnvSettings
+from src.core.llm import LLMClient
 from src.scheduler.bot_scheduler import get_job_queue, get_scheduler
 from src.state.database import get_database
 from src.state.manager import load_state
 from src.web.app import ChromaMemoryDep, ConfigDep, get_config
-
-if TYPE_CHECKING:
-    from src.memory.chroma_client import ChromaMemory
 
 router = APIRouter()
 
@@ -106,6 +106,64 @@ class JobQueueResponse(BaseModel):
     size: int
     pending_jobs: list[str]
     is_empty: bool
+
+
+class ChatMessageRequest(BaseModel):
+    """Request model for manual chat input."""
+
+    message: str
+
+
+class ChatMessageResponse(BaseModel):
+    """Response model for manual chat output."""
+
+    reply: str
+    provider: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    timestamp: str
+
+
+def _load_env_settings() -> EnvSettings:
+    """Load environment variables needed for LLM access."""
+    return EnvSettings(
+        OPENAI_API_KEY=os.getenv("OPENAI_API_KEY"),
+        OPENROUTER_API_KEY=os.getenv("OPENROUTER_API_KEY"),
+        GOOGLE_API_KEY=os.getenv("GOOGLE_API_KEY"),
+        ANTHROPIC_API_KEY=os.getenv("ANTHROPIC_API_KEY"),
+        TWITTER_USERNAME=os.getenv("TWITTER_USERNAME"),
+        TWITTER_PASSWORD=os.getenv("TWITTER_PASSWORD"),
+        LANGCHAIN_API_KEY=os.getenv("LANGCHAIN_API_KEY"),
+        LANGCHAIN_PROJECT=os.getenv("LANGCHAIN_PROJECT"),
+        LANGCHAIN_TRACING_V2=os.getenv("LANGCHAIN_TRACING_V2"),
+    )
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+async def _run_chat(message: str, config: BotConfig) -> ChatMessageResponse:
+    """Call the LLM pipeline with retry/backoff."""
+    env_settings = _load_env_settings()
+    llm_client = LLMClient(config=config, env_settings=env_settings)
+
+    system_prompt = config.get_system_prompt()
+    result = await llm_client.chat(
+        user_prompt=message,
+        system_prompt=system_prompt,
+        operation="manual_chat",
+        max_tokens=config.llm.max_tokens,
+        temperature=config.llm.temperature,
+    )
+
+    usage = result.usage
+    return ChatMessageResponse(
+        reply=result.content,
+        provider=result.provider,
+        prompt_tokens=usage.prompt_tokens if usage else 0,
+        completion_tokens=usage.completion_tokens if usage else 0,
+        total_tokens=usage.total_tokens if usage else 0,
+        timestamp=datetime.utcnow().isoformat() + "Z",
+    )
 
 
 @router.get("/posts/read", response_model=PostsListResponse)
@@ -305,6 +363,17 @@ async def get_job_queue_status() -> JobQueueResponse:
         pending_jobs=pending_jobs,
         is_empty=job_queue.is_empty(),
     )
+
+
+@router.post("/chat", response_model=ChatMessageResponse)
+async def chat_with_agent(
+    payload: ChatMessageRequest, config: ConfigDep
+) -> ChatMessageResponse:
+    """Chat with the agent using the configured LLM pipeline."""
+    try:
+        return await _run_chat(payload.message, config)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Chat failed: {exc}")
 
 
 class SettingsUpdateRequest(BaseModel):

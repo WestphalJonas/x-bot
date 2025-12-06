@@ -140,6 +140,20 @@ async def settings_page(request: Request, config: ConfigDep) -> HTMLResponse:
     )
 
 
+@router.get("/chat", response_class=HTMLResponse)
+async def chat_page(request: Request, config: ConfigDep) -> HTMLResponse:
+    """Manual chat page for interacting with the agent."""
+    templates = request.app.state.templates
+
+    return templates.TemplateResponse(
+        "chat.html",
+        {
+            "request": request,
+            "config": config,
+        },
+    )
+
+
 @router.get("/partials/posts/read", response_class=HTMLResponse)
 async def posts_read_partial(request: Request, page: int = 1) -> HTMLResponse:
     """Partial for read posts list (HTMX)."""

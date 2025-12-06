@@ -17,7 +17,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
 from src.core.config import BotConfig, EnvSettings
-from src.web.data_tracker import log_token_usage
+from src.monitoring.token_logging import log_token_usage
 
 logger = logging.getLogger(__name__)
 
