@@ -345,3 +345,18 @@ class LangChainLLM:
         if provider == "anthropic":
             return self._normalize_anthropic_model(self.config.llm.model)
         return self.config.llm.model
+
+    async def aclose(self) -> None:
+        """Close underlying async HTTP clients to avoid loop-close warnings."""
+        for client in self._chat_clients.values():
+            try:
+                # ChatOpenAI / OpenRouter expose .client (AsyncOpenAI)
+                if hasattr(client, "client") and hasattr(client.client, "aclose"):
+                    await client.client.aclose()  # type: ignore[attr-defined]
+                # Some wrappers expose .async_client
+                elif hasattr(client, "async_client") and hasattr(
+                    client.async_client, "aclose"
+                ):
+                    await client.async_client.aclose()  # type: ignore[attr-defined]
+            except Exception as exc:
+                logger.debug("chat_client_close_failed", extra={"error": str(exc)})

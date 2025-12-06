@@ -121,6 +121,8 @@ class LLMClient:
         return await self._client.embed_text(text)
 
     async def close(self) -> None:
-        """Compatibility close hook (LangChain clients are lazy)."""
-        # Nothing to close explicitly; hook retained for API parity.
-        return
+        """Close underlying HTTP clients to avoid loop shutdown warnings."""
+        try:
+            await self._client.aclose()
+        except Exception:
+            pass
