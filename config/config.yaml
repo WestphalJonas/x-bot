@@ -8,7 +8,7 @@ llm:
   model: x-ai/grok-4.1-fast
   provider: openrouter
   similarity_threshold: 0.85
-  temperature: 0.8
+  temperature: 0.9
   use_fallback: false
 personality:
   max_tweet_length: 280
@@ -23,15 +23,15 @@ personality:
   - web3
   - memes
 rate_limits:
-  max_posts_per_day: 10
+  max_posts_per_day: 15
   max_replies_per_day: 50
   reset_time_utc: 00:00
 scheduler:
   event_check_minutes: 15
-  inspiration_batch_size: 20
+  inspiration_batch_size: 25
   inspiration_check_minutes: 60
   mention_check_minutes: 30
-  post_interval_hours: 2.0
+  post_interval_hours: 3.0
   post_jitter_hours: 1.0
   reading_check_minutes: 30
 selenium:

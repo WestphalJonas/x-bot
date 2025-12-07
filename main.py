@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from src.core.config import BotConfig, EnvSettings
 from src.scheduler import BotScheduler
 from src.scheduler.bot_scheduler import get_job_lock, get_job_queue, set_scheduler
+from src.scheduler.control_server import start_control_server
 from src.scheduler.jobs import (
     check_notifications,
     post_autonomous_tweet,
@@ -189,6 +190,11 @@ def main():
     scheduler.setup_inspiration_job(
         create_job_wrapper(process_inspiration_queue, config, env_settings)
     )
+
+    # Start control server for cross-process reload handling
+    control_host = os.getenv("SCHEDULER_CONTROL_HOST", "127.0.0.1")
+    control_port = int(os.getenv("SCHEDULER_CONTROL_PORT", "8790"))
+    start_control_server(scheduler, host=control_host, port=control_port)
 
     # Setup signal handlers for graceful shutdown
     def signal_handler(signum, frame):

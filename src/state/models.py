@@ -65,6 +65,22 @@ class AgentState(BaseModel):
         default_factory=list,
         description="List of successfully posted tweets (max 50)",
     )
+    paused: bool = Field(
+        default=False,
+        description="Whether the scheduler is paused (all jobs halted)",
+    )
+    paused_at: datetime | None = Field(
+        default=None,
+        description="Timestamp when the scheduler was paused",
+    )
+    next_run_delays: dict[str, float] = Field(
+        default_factory=dict,
+        description="Remaining seconds until next run for each job when paused",
+    )
+    next_run_times: dict[str, str] = Field(
+        default_factory=dict,
+        description="Absolute next run times (ISO) per job when paused",
+    )
 
 
 class TokenUsageEntry(BaseModel):

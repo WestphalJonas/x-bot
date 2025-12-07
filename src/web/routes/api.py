@@ -1,11 +1,13 @@
 """API routes for the X bot dashboard."""
 
+import asyncio
 import os
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -18,6 +20,35 @@ from src.state.manager import load_state
 from src.web.app import ChromaMemoryDep, ConfigDep, get_config
 
 router = APIRouter()
+
+CONTROL_URL = os.getenv("SCHEDULER_CONTROL_URL")
+CONTROL_HOST = os.getenv("SCHEDULER_CONTROL_HOST", "127.0.0.1")
+CONTROL_PORT = os.getenv("SCHEDULER_CONTROL_PORT", "8790")
+
+
+async def _post_control(path: str, local_method: str | None = None) -> dict[str, Any]:
+    """Send a POST to the scheduler control server with optional local fallback."""
+    base = CONTROL_URL or f"http://{CONTROL_HOST}:{CONTROL_PORT}"
+    url = f"{base}{path}"
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(url)
+            response.raise_for_status()
+            return response.json()
+    except Exception as exc:
+        if local_method:
+            scheduler = get_scheduler()
+            if scheduler is not None:
+                try:
+                    method = getattr(scheduler, local_method)
+                    return await asyncio.to_thread(method)
+                except Exception as inner_exc:
+                    return {
+                        "status": "error",
+                        "reason": f"local_{local_method}_failed: {inner_exc}",
+                    }
+        return {"status": "error", "reason": f"control_request_failed: {exc}"}
 
 
 class PostResponse(BaseModel):
@@ -446,7 +477,7 @@ async def update_settings(updates: SettingsUpdateRequest) -> dict[str, Any]:
         get_config.cache_clear()
 
         # Reload scheduler with new config
-        reload_result = _reload_scheduler_config()
+        reload_result = await _reload_scheduler_config()
 
         return {
             "status": "ok",
@@ -461,21 +492,41 @@ async def update_settings(updates: SettingsUpdateRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Failed to save settings: {e}")
 
 
-def _reload_scheduler_config() -> dict[str, Any]:
-    """Helper to reload scheduler config.
+async def _reload_scheduler_config() -> dict[str, Any]:
+    """Helper to reload scheduler config via control server with local fallback."""
+    return await _post_control("/reload", local_method="reload_config")
 
-    Returns:
-        Dict with reload status and details
-    """
-    scheduler = get_scheduler()
-    if scheduler is None:
-        return {"status": "skipped", "reason": "scheduler not available"}
 
-    try:
-        result = scheduler.reload_config()
-        return result
-    except Exception as e:
-        return {"status": "error", "reason": str(e)}
+async def _pause_scheduler() -> dict[str, Any]:
+    """Pause scheduler via control server."""
+    return await _post_control("/pause", local_method="pause_all")
+
+
+async def _resume_scheduler() -> dict[str, Any]:
+    """Resume scheduler via control server."""
+    return await _post_control("/resume", local_method="resume_all")
+
+
+@router.post("/scheduler/pause")
+async def pause_scheduler() -> dict[str, Any]:
+    """Pause all scheduler jobs and capture next runs."""
+    result = await _pause_scheduler()
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=500, detail=result.get("reason", "Pause failed")
+        )
+    return {"status": "ok", **result}
+
+
+@router.post("/scheduler/resume")
+async def resume_scheduler() -> dict[str, Any]:
+    """Resume scheduler jobs using captured next runs."""
+    result = await _resume_scheduler()
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=500, detail=result.get("reason", "Resume failed")
+        )
+    return {"status": "ok", **result}
 
 
 @router.post("/config/reload")
@@ -489,7 +540,7 @@ async def reload_config() -> dict[str, Any]:
     get_config.cache_clear()
 
     # Reload scheduler
-    result = _reload_scheduler_config()
+    result = await _reload_scheduler_config()
 
     if result.get("status") == "error":
         raise HTTPException(

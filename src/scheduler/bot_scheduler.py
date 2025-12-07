@@ -1,6 +1,8 @@
 """Bot scheduler using APScheduler BackgroundScheduler."""
 
 import logging
+import asyncio
+from datetime import datetime, timezone, timedelta
 import threading
 from collections import deque
 from typing import Callable
@@ -9,6 +11,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from src.core.config import BotConfig
+from src.state.manager import load_state, save_state
+from src.state.models import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +133,138 @@ class BotScheduler:
         self._is_running = False
         # Store job functions for reload capability
         self._job_funcs: dict[str, Callable] = {}
+
+    def _load_state_sync(self) -> AgentState:
+        """Load agent state synchronously."""
+        return asyncio.run(load_state())
+
+    def _save_state_sync(self, state: AgentState) -> None:
+        """Save agent state synchronously."""
+        asyncio.run(save_state(state))
+
+    def _snapshot_next_runs(self) -> tuple[dict[str, float], dict[str, str]]:
+        """Capture remaining seconds and absolute times until next run for each job."""
+        now = datetime.now(timezone.utc)
+        delays: dict[str, float] = {}
+        times: dict[str, str] = {}
+
+        for job in self.scheduler.get_jobs():
+            next_run = job.next_run_time
+            if next_run is None:
+                continue
+
+            if next_run.tzinfo is None:
+                next_run = next_run.replace(tzinfo=timezone.utc)
+
+            remaining = (next_run - now).total_seconds()
+            delays[job.id] = remaining if remaining > 0 else 0.0
+            times[job.id] = next_run.isoformat()
+
+        return delays, times
+
+    def pause_all(self) -> dict[str, object]:
+        """Pause all jobs, persisting remaining time until next run."""
+        next_run_delays, next_run_times = self._snapshot_next_runs()
+        jobs = self.scheduler.get_jobs()
+
+        for job in jobs:
+            try:
+                self.scheduler.pause_job(job.id)
+            except Exception as e:
+                logger.warning(
+                    "job_pause_failed", extra={"job_id": job.id, "error": str(e)}
+                )
+
+        now = datetime.now(timezone.utc)
+        state = self._load_state_sync()
+        state.paused = True
+        state.paused_at = now
+        state.next_run_delays = next_run_delays
+        state.next_run_times = next_run_times
+        state.last_action = "Scheduler paused"
+        state.last_action_time = now
+        self._save_state_sync(state)
+
+        logger.info(
+            "scheduler_paused",
+            extra={
+                "jobs_paused": len(jobs),
+                "next_runs_captured": len(next_run_delays),
+            },
+        )
+
+        return {
+            "status": "paused",
+            "next_runs": next_run_delays,
+            "next_run_times": next_run_times,
+            "paused_at": now.isoformat(),
+        }
+
+    def resume_all(self) -> dict[str, object]:
+        """Resume all jobs using captured next-run delays."""
+        state = self._load_state_sync()
+        delays = state.next_run_delays or {}
+        times = state.next_run_times or {}
+        jobs = self.scheduler.get_jobs()
+        now = datetime.now(timezone.utc)
+        paused_at = state.paused_at or now
+
+        for job in jobs:
+            delay = delays.get(job.id)
+            time_str = times.get(job.id)
+
+            if time_str:
+                try:
+                    parsed = datetime.fromisoformat(time_str)
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=timezone.utc)
+                    remaining_from_saved = (parsed - paused_at).total_seconds()
+                    delay = max(remaining_from_saved, 0.0)
+                except Exception as e:
+                    logger.warning(
+                        "job_next_run_parse_failed",
+                        extra={"job_id": job.id, "error": str(e)},
+                    )
+
+            if delay is not None:
+                new_time = now + timedelta(seconds=max(delay, 1.0))
+                try:
+                    self.scheduler.modify_job(job.id, next_run_time=new_time)
+                except Exception as e:
+                    logger.warning(
+                        "job_modify_failed",
+                        extra={"job_id": job.id, "error": str(e)},
+                    )
+            try:
+                self.scheduler.resume_job(job.id)
+            except Exception as e:
+                logger.warning(
+                    "job_resume_failed", extra={"job_id": job.id, "error": str(e)}
+                )
+
+        state.paused = False
+        state.paused_at = None
+        state.next_run_delays = {}
+        state.next_run_times = {}
+        state.last_action = "Scheduler resumed"
+        state.last_action_time = now
+        self._save_state_sync(state)
+
+        logger.info(
+            "scheduler_resumed",
+            extra={
+                "jobs_resumed": len(jobs),
+                "delays_applied": len(delays),
+                "times_applied": len(times),
+            },
+        )
+
+        return {
+            "status": "resumed",
+            "jobs_resumed": len(jobs),
+            "delays_applied": len(delays),
+            "times_applied": len(times),
+        }
 
     def add_job(
         self,
