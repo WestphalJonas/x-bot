@@ -5,10 +5,11 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 
 import httpx
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -49,6 +50,52 @@ async def _post_control(path: str, local_method: str | None = None) -> dict[str,
                         "reason": f"local_{local_method}_failed: {inner_exc}",
                     }
         return {"status": "error", "reason": f"control_request_failed: {exc}"}
+
+
+async def _log_stream(
+    log_path: Path, level: str | None, tail_bytes: int
+) -> AsyncIterator[str]:
+    """Async generator that streams log lines as SSE data."""
+    if not log_path.exists():
+        yield "data: log file not found\n\n"
+        return
+
+    level_filter = level.upper() if level else None
+
+    def _should_emit(line: str) -> bool:
+        if not level_filter:
+            return True
+        return level_filter in line.upper()
+
+    with log_path.open("r", encoding="utf-8", errors="ignore") as f:
+        if tail_bytes > 0:
+            try:
+                size = log_path.stat().st_size
+                f.seek(max(size - tail_bytes, 0))
+                f.readline()  # discard partial
+            except OSError:
+                pass
+
+        while True:
+            line = f.readline()
+            if not line:
+                await asyncio.sleep(0.5)
+                continue
+
+            if not _should_emit(line):
+                continue
+
+            payload = line.rstrip("\n")
+            yield f"data: {payload}\n\n"
+
+
+@router.get("/logs/stream")
+async def stream_logs(level: str | None = None, tail_bytes: int = 8000):
+    """Stream live logs from bot.log as Server-Sent Events."""
+    tail_bytes = max(tail_bytes, 0)
+    log_path = Path("logs/bot.log")
+    generator = _log_stream(log_path, level, tail_bytes)
+    return StreamingResponse(generator, media_type="text/event-stream")
 
 
 class PostResponse(BaseModel):

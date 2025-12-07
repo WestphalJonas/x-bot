@@ -38,6 +38,183 @@
     --accent-yellow: #ffd400;
 }
 
+/* Logs page */
+/* Logs page */
+.logs-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 140px);
+  min-height: 400px;
+}
+
+.logs-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface-1, #0a0a0a);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px 8px 0 0;
+  flex-wrap: wrap;
+}
+
+.logs-toolbar-left,
+.logs-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.log-status {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.log-status-info {
+  background: var(--accent, #1d9bf0);
+  color: #fff;
+}
+
+.log-status-success {
+  background: #22c55e;
+  color: #fff;
+}
+
+.log-status-warning {
+  background: #f59e0b;
+  color: #000;
+}
+
+.log-status-error {
+  background: #ef4444;
+  color: #fff;
+}
+
+.logs-select,
+.logs-input {
+  background: var(--surface-2, #111);
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  color: var(--text-primary, #e7e9ea);
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+.logs-select {
+  min-width: 100px;
+}
+
+.logs-input {
+  width: 80px;
+}
+
+.logs-btn {
+  background: var(--surface-2, #111);
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  color: var(--text-primary, #e7e9ea);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 6px 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.logs-btn:hover {
+  background: var(--surface-hover, #1a1a1a);
+  border-color: var(--border-hover, #555);
+}
+
+.logs-btn-primary {
+  background: var(--accent, #1d9bf0);
+  border-color: var(--accent, #1d9bf0);
+  color: #fff;
+}
+
+.logs-btn-primary:hover {
+  background: var(--accent-hover, #1a8cd8);
+  border-color: var(--accent-hover, #1a8cd8);
+}
+
+.logs-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #71767b);
+  cursor: pointer;
+  user-select: none;
+}
+
+.logs-toggle input {
+  accent-color: var(--accent, #1d9bf0);
+}
+
+.log-output {
+  flex: 1;
+  margin: 0;
+  background: #0d0d0d;
+  border: 1px solid var(--border, #333);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 10px 14px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 1px 0;
+}
+
+.log-line.log-error {
+  color: #f87171;
+}
+
+.log-line.log-warning {
+  color: #fbbf24;
+}
+
+.log-line.log-debug {
+  color: #71767b;
+}
+
+/* Legacy status pill (keep for backward compat) */
+.status-pill {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.status-pill-info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.status-pill-success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.status-pill-warning {
+  background: rgba(234, 179, 8, 0.15);
+  color: #fcd34d;
+}
+
+.status-pill-error {
+  background: rgba(248, 113, 113, 0.15);
+  color: #fca5a5;
+}
+
 /* Dark Theme (default) */
 [data-theme="dark"] {
     --bg-primary: #000000;

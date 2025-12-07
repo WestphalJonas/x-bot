@@ -126,6 +126,19 @@ async def analytics_page(request: Request) -> HTMLResponse:
     )
 
 
+@router.get("/logs", response_class=HTMLResponse)
+async def logs_page(request: Request) -> HTMLResponse:
+    """Live logs streaming page."""
+    templates = request.app.state.templates
+
+    return templates.TemplateResponse(
+        "logs.html",
+        {
+            "request": request,
+        },
+    )
+
+
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, config: ConfigDep) -> HTMLResponse:
     """Settings page for editing bot configuration."""

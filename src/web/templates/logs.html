@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - X Bot{% endblock %}
+{% block page_title %}Logs{% endblock %}
+
+{% block content %}
+<div class="logs-container">
+    <div class="logs-toolbar">
+        <div class="logs-toolbar-left">
+            <span id="log-status" class="log-status log-status-info">Connecting…</span>
+        </div>
+        <div class="logs-toolbar-right">
+            <select id="log-level" class="logs-select" title="Log level filter">
+                <option value="">All levels</option>
+                <option value="ERROR">ERROR</option>
+                <option value="WARNING">WARNING</option>
+                <option value="INFO" selected>INFO+</option>
+                <option value="DEBUG">DEBUG</option>
+            </select>
+            <input id="tail-bytes" class="logs-input" type="number" min="0" value="16000" title="Initial bytes to load" />
+            <button class="logs-btn" id="clear-btn" title="Clear output">Clear</button>
+            <button class="logs-btn logs-btn-primary" id="reconnect-btn" title="Reconnect stream">Reconnect</button>
+            <label class="logs-toggle" title="Auto-scroll to bottom">
+                <input type="checkbox" id="autoscroll-toggle" checked />
+                <span>Auto-scroll</span>
+            </label>
+            <label class="logs-toggle" title="Pause incoming logs">
+                <input type="checkbox" id="pause-stream-toggle" />
+                <span>Pause</span>
+            </label>
+        </div>
+    </div>
+    <pre id="log-output" class="log-output"></pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function() {
+    let evtSource = null;
+    let isPaused = false;
+    const output = document.getElementById('log-output');
+    const statusEl = document.getElementById('log-status');
+
+    function setStatus(text, type) {
+        if (!statusEl) return;
+        statusEl.textContent = text;
+        statusEl.className = 'log-status log-status-' + type;
+    }
+
+    function closeStream() {
+        if (evtSource) {
+            evtSource.close();
+            evtSource = null;
+        }
+    }
+
+    function connect() {
+        closeStream();
+        output.textContent = '';
+
+        const level = document.getElementById('log-level').value;
+        const tailBytes = document.getElementById('tail-bytes').value || 0;
+        const params = new URLSearchParams();
+        if (level) params.append('level', level);
+        params.append('tail_bytes', tailBytes);
+
+        setStatus('Connecting…', 'info');
+        evtSource = new EventSource('/api/logs/stream?' + params.toString());
+
+        evtSource.onopen = function() {
+            setStatus('Connected', 'success');
+        };
+
+        evtSource.onerror = function() {
+            setStatus('Disconnected', 'error');
+        };
+
+        evtSource.onmessage = function(e) {
+            if (isPaused) return;
+            const line = document.createElement('div');
+            line.className = 'log-line';
+            line.textContent = e.data;
+
+            // Color-code by level
+            if (e.data.indexOf(' ERROR ') !== -1 || e.data.indexOf('"ERROR"') !== -1) {
+                line.classList.add('log-error');
+            } else if (e.data.indexOf(' WARNING ') !== -1 || e.data.indexOf('"WARNING"') !== -1) {
+                line.classList.add('log-warning');
+            } else if (e.data.indexOf(' DEBUG ') !== -1 || e.data.indexOf('"DEBUG"') !== -1) {
+                line.classList.add('log-debug');
+            }
+
+            output.appendChild(line);
+
+            // Limit lines to prevent memory issues
+            while (output.childElementCount > 2000) {
+                output.removeChild(output.firstChild);
+            }
+
+            if (document.getElementById('autoscroll-toggle').checked) {
+                output.scrollTop = output.scrollHeight;
+            }
+        };
+    }
+
+    document.getElementById('reconnect-btn').addEventListener('click', connect);
+    document.getElementById('clear-btn').addEventListener('click', function() {
+        output.textContent = '';
+    });
+    document.getElementById('log-level').addEventListener('change', connect);
+    document.getElementById('pause-stream-toggle').addEventListener('change', function(e) {
+        isPaused = e.target.checked;
+        setStatus(isPaused ? 'Paused' : 'Connected', isPaused ? 'warning' : 'success');
+    });
+
+    connect();
+})();
+</script>
+{% endblock %}
+
