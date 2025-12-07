@@ -1,9 +1,10 @@
 """API routes for the X bot dashboard."""
 
 import asyncio
+import logging
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -17,10 +18,14 @@ from src.core.config import BotConfig, EnvSettings
 from src.core.llm import LLMClient
 from src.scheduler.bot_scheduler import get_job_queue, get_scheduler
 from src.state.database import get_database
-from src.state.manager import load_state
+from src.state.manager import load_state, save_state
 from src.web.app import ChromaMemoryDep, ConfigDep, get_config
+from src.web.data_tracker import log_action, log_written_tweet
+from src.x.posting import post_tweet
+from src.x.session import AsyncTwitterSession
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 CONTROL_URL = os.getenv("SCHEDULER_CONTROL_URL")
 CONTROL_HOST = os.getenv("SCHEDULER_CONTROL_HOST", "127.0.0.1")
@@ -201,6 +206,22 @@ class ChatMessageResponse(BaseModel):
     completion_tokens: int
     total_tokens: int
     timestamp: str
+
+
+class ManualPostRequest(BaseModel):
+    """Request model for posting an assistant reply."""
+
+    text: str
+    metadata: dict[str, Any] | None = None
+
+
+class ManualPostResponse(BaseModel):
+    """Response model for manual post action."""
+
+    status: str
+    message: str
+    text: str
+    posted_at: str
 
 
 def _load_env_settings() -> EnvSettings:
@@ -452,6 +473,102 @@ async def chat_with_agent(
         return await _run_chat(payload.message, config)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Chat failed: {exc}")
+
+
+@router.post("/posts/manual", response_model=ManualPostResponse)
+async def post_manual_tweet(
+    payload: ManualPostRequest, config: ConfigDep
+) -> ManualPostResponse:
+    """Post a tweet manually from a generated assistant response."""
+    text = (payload.text or "").strip()
+
+    if not text:
+        raise HTTPException(status_code=400, detail="Tweet text is required")
+
+    state = await load_state(reset_time_utc=config.rate_limits.reset_time_utc)
+
+    if state.counters.get("posts_today", 0) >= config.rate_limits.max_posts_per_day:
+        raise HTTPException(
+            status_code=429, detail="Daily post limit reached. Try again tomorrow."
+        )
+
+    env_settings = _load_env_settings()
+    username = env_settings.get("TWITTER_USERNAME")
+    password = env_settings.get("TWITTER_PASSWORD")
+
+    if not username or not password:
+        raise HTTPException(
+            status_code=400, detail="Twitter credentials are not configured"
+        )
+
+    has_provider = any(
+        [
+            env_settings.get("OPENAI_API_KEY"),
+            env_settings.get("OPENROUTER_API_KEY"),
+            env_settings.get("GOOGLE_API_KEY"),
+            env_settings.get("ANTHROPIC_API_KEY"),
+        ]
+    )
+
+    if not has_provider:
+        raise HTTPException(
+            status_code=400, detail="At least one LLM provider API key is required"
+        )
+
+    llm_client = LLMClient(config=config, env_settings=env_settings)
+
+    try:
+        is_valid, validation_error = await llm_client.validate_tweet(text)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=validation_error)
+
+        try:
+            is_aligned = await llm_client.check_brand_alignment(text)
+            if not is_aligned:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Tweet not aligned with configured tone/style/topics",
+                )
+        except HTTPException:
+            raise
+        except Exception as alignment_exc:
+            logger.warning(
+                "brand_alignment_check_failed",
+                extra={"error": str(alignment_exc)},
+            )
+
+        try:
+            async with AsyncTwitterSession(config, username, password) as driver:
+                posted = post_tweet(driver, text, config)
+                if not posted:
+                    raise RuntimeError("Tweet posting failed")
+        except HTTPException:
+            raise
+        except Exception as post_exc:
+            logger.error(
+                "manual_post_failed",
+                extra={"error": str(post_exc), "tweet_length": len(text)},
+                exc_info=True,
+            )
+            raise HTTPException(status_code=500, detail=f"Posting failed: {post_exc}")
+
+        state.counters["posts_today"] = state.counters.get("posts_today", 0) + 1
+        state.last_post_time = datetime.now(timezone.utc)
+        await save_state(state)
+
+        metadata = payload.metadata or {"source": "chat"}
+        await log_written_tweet(text=text, tweet_type="manual", metadata=metadata)
+        await log_action("Posted manual tweet")
+
+        posted_at = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+        return ManualPostResponse(
+            status="ok",
+            message="Tweet posted successfully",
+            text=text,
+            posted_at=posted_at,
+        )
+    finally:
+        await llm_client.close()
 
 
 class SettingsUpdateRequest(BaseModel):

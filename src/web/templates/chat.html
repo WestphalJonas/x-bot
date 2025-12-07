@@ -106,7 +106,11 @@
     const messages = [{
         role: 'assistant',
         text: "Hi! I'm ready to help draft content. Share your idea and I'll create options using the configured personality.",
-        meta: 'Agent'
+        meta: 'Agent',
+        allowPost: false,
+        posted: false,
+        showConfirm: false,
+        posting: false,
     }];
 
     function showToast(message, isError = false) {
@@ -125,7 +129,8 @@
 
     function renderMessages() {
         windowEl.innerHTML = '';
-        messages.forEach(({ role, text, meta }) => {
+        messages.forEach((message, index) => {
+            const { role, text, meta, allowPost, posted, posting, showConfirm, postError, postedAt } = message;
             const msg = document.createElement('div');
             msg.className = `chat-message chat-message-${role}`;
 
@@ -149,6 +154,80 @@
                 bubble.appendChild(metaEl);
             }
 
+            if (role === 'assistant' && allowPost) {
+                const actions = document.createElement('div');
+                actions.className = 'chat-post-actions';
+
+                const postBtn = document.createElement('button');
+                postBtn.type = 'button';
+                postBtn.className = 'btn btn-secondary btn-compact chat-post-btn';
+                postBtn.textContent = posted ? 'Posted' : 'Post';
+                postBtn.disabled = Boolean(posted) || Boolean(posting);
+
+                const confirmEl = document.createElement('div');
+                confirmEl.className = `chat-post-confirm${showConfirm ? '' : ' hidden'}`;
+
+                const confirmText = document.createElement('span');
+                confirmText.className = 'chat-post-confirm-text';
+                confirmText.textContent = 'Post this message?';
+
+                const confirmBtn = document.createElement('button');
+                confirmBtn.type = 'button';
+                confirmBtn.className = 'btn btn-primary btn-compact';
+                confirmBtn.textContent = posting ? 'Posting...' : 'Confirm';
+                confirmBtn.disabled = Boolean(posting);
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.className = 'btn btn-secondary btn-compact';
+                cancelBtn.textContent = 'Cancel';
+                cancelBtn.disabled = Boolean(posting);
+
+                const statusEl = document.createElement('div');
+                statusEl.className = 'chat-post-status';
+                if (posting) {
+                    statusEl.textContent = 'Posting...';
+                } else if (posted) {
+                    statusEl.textContent = `Posted ${postedAt ? new Date(postedAt).toLocaleTimeString() : ''}`;
+                    statusEl.classList.add('chat-post-success');
+                } else if (postError) {
+                    statusEl.textContent = postError;
+                    statusEl.classList.add('chat-post-error');
+                }
+
+                postBtn.addEventListener('click', () => {
+                    if (posted || posting) return;
+                    messages[index].showConfirm = true;
+                    renderMessages();
+                });
+
+                confirmBtn.addEventListener('click', () => {
+                    if (posting || posted) return;
+                    postAssistantResponse(index);
+                });
+
+                cancelBtn.addEventListener('click', () => {
+                    messages[index].showConfirm = false;
+                    renderMessages();
+                });
+
+                confirmEl.appendChild(confirmText);
+                confirmEl.appendChild(confirmBtn);
+                confirmEl.appendChild(cancelBtn);
+
+                actions.appendChild(postBtn);
+                actions.appendChild(confirmEl);
+                if (statusEl.textContent) {
+                    actions.appendChild(statusEl);
+                }
+
+                if (!showConfirm && !posted) {
+                    confirmEl.classList.add('hidden');
+                }
+
+                bubble.appendChild(actions);
+            }
+
             msg.appendChild(bubble);
             windowEl.appendChild(msg);
         });
@@ -163,6 +242,45 @@
         }
         statusEl.textContent = text;
         statusEl.classList.toggle('error', isError);
+    }
+
+    async function postAssistantResponse(index) {
+        const message = messages[index];
+        if (!message || message.role !== 'assistant') {
+            return;
+        }
+
+        messages[index].posting = true;
+        messages[index].postError = '';
+        setStatus('Posting...');
+        renderMessages();
+
+        try {
+            const response = await fetch('/api/posts/manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: message.text })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || 'Post failed');
+            }
+
+            messages[index].posted = true;
+            messages[index].postedAt = data.posted_at || new Date().toISOString();
+            setStatus('');
+            showToast('Tweet posted');
+        } catch (error) {
+            console.error('Manual post error', error);
+            messages[index].postError = error.message || 'Post failed';
+            setStatus(messages[index].postError, true);
+            showToast(messages[index].postError, true);
+        } finally {
+            messages[index].posting = false;
+            messages[index].showConfirm = false;
+            renderMessages();
+        }
     }
 
     async function sendMessage(event) {
@@ -188,7 +306,16 @@
             }
 
             const meta = `${data.provider} · ${data.total_tokens} tokens`;
-            messages.push({ role: 'assistant', text: data.reply, meta });
+            messages.push({
+                role: 'assistant',
+                text: data.reply,
+                meta,
+                allowPost: true,
+                posted: false,
+                posting: false,
+                showConfirm: false,
+                postError: '',
+            });
             setStatus('');
             showToast('Response received');
             renderMessages();
@@ -207,7 +334,11 @@
         messages.splice(0, messages.length, {
             role: 'assistant',
             text: 'Chat cleared. Share your next idea to begin.',
-            meta: 'Agent'
+            meta: 'Agent',
+            allowPost: false,
+            posted: false,
+            posting: false,
+            showConfirm: false,
         });
         renderMessages();
         setStatus('');
