@@ -9,7 +9,9 @@ from src.core.langchain_clients import ChatResult, LangChainLLM
 from src.core.prompts import (
     BRAND_CHECK_PROMPT,
     INSPIRATION_TWEET_PROMPT,
+    INSPIRATION_TWEET_WITH_CONTEXT_PROMPT,
     TWEET_GENERATION_PROMPT,
+    TWEET_GENERATION_WITH_CONTEXT_PROMPT,
 )
 from src.state.models import Post
 
@@ -42,12 +44,22 @@ class LLMClient:
             max_tokens=max_tokens,
         )
 
-    async def generate_tweet(self, system_prompt: str) -> str:
+    async def generate_tweet(
+        self, system_prompt: str, recent_tweets: list[str] | None = None
+    ) -> str:
         """Generate a tweet with fallback providers."""
-        user_prompt = TWEET_GENERATION_PROMPT.format(
-            min_tweet_length=self.config.personality.min_tweet_length,
-            max_tweet_length=self.config.personality.max_tweet_length,
-        )
+        if recent_tweets:
+            user_prompt = TWEET_GENERATION_WITH_CONTEXT_PROMPT.format(
+                recent_tweets=self._format_recent_tweets(recent_tweets),
+                min_tweet_length=self.config.personality.min_tweet_length,
+                max_tweet_length=self.config.personality.max_tweet_length,
+            )
+        else:
+            user_prompt = TWEET_GENERATION_PROMPT.format(
+                min_tweet_length=self.config.personality.min_tweet_length,
+                max_tweet_length=self.config.personality.max_tweet_length,
+            )
+
         result = await self._client.chat(
             user_prompt=user_prompt,
             system_prompt=system_prompt,
@@ -56,20 +68,33 @@ class LLMClient:
         )
         return result.content
 
-    async def generate_inspiration_tweet(self, posts: list[Post]) -> str:
+    async def generate_inspiration_tweet(
+        self, posts: list[Post], recent_tweets: list[str] | None = None
+    ) -> str:
         """Generate a tweet inspired by a list of posts."""
         posts_context = "\n\n".join(
             [f"Post {i + 1}:\n{post.text}" for i, post in enumerate(posts)]
         )
 
-        user_prompt = INSPIRATION_TWEET_PROMPT.format(
-            posts_context=posts_context,
-            tone=self.config.personality.tone,
-            style=self.config.personality.style,
-            topics=", ".join(self.config.personality.topics),
-            min_tweet_length=self.config.personality.min_tweet_length,
-            max_tweet_length=self.config.personality.max_tweet_length,
-        )
+        if recent_tweets:
+            user_prompt = INSPIRATION_TWEET_WITH_CONTEXT_PROMPT.format(
+                posts_context=posts_context,
+                recent_tweets=self._format_recent_tweets(recent_tweets),
+                tone=self.config.personality.tone,
+                style=self.config.personality.style,
+                topics=", ".join(self.config.personality.topics),
+                min_tweet_length=self.config.personality.min_tweet_length,
+                max_tweet_length=self.config.personality.max_tweet_length,
+            )
+        else:
+            user_prompt = INSPIRATION_TWEET_PROMPT.format(
+                posts_context=posts_context,
+                tone=self.config.personality.tone,
+                style=self.config.personality.style,
+                topics=", ".join(self.config.personality.topics),
+                min_tweet_length=self.config.personality.min_tweet_length,
+                max_tweet_length=self.config.personality.max_tweet_length,
+            )
 
         system_prompt = self.config.get_system_prompt()
         result = await self._client.chat(
@@ -119,6 +144,11 @@ class LLMClient:
     async def embed_text(self, text: str) -> list[float]:
         """Get embedding for text using configured embedding provider."""
         return await self._client.embed_text(text)
+
+    @staticmethod
+    def _format_recent_tweets(recent_tweets: list[str]) -> str:
+        """Format recent tweets into a readable block."""
+        return "\n".join([f"- {tweet}" for tweet in recent_tweets])
 
     async def close(self) -> None:
         """Close underlying HTTP clients to avoid loop shutdown warnings."""

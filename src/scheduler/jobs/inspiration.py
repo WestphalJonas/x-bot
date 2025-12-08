@@ -8,6 +8,7 @@ from src.core.config import BotConfig, EnvSettings
 from src.core.evaluation import re_evaluate_tweet
 from src.core.llm import LLMClient
 from src.state.manager import load_state, save_state
+from src.state.database import get_database
 from src.state.models import Post
 from src.web.data_tracker import log_action, log_rejected_tweet, log_written_tweet
 from src.x.posting import post_tweet
@@ -113,6 +114,23 @@ async def _process_inspiration_queue_async(
         raise ValueError("TWITTER_PASSWORD environment variable is required")
 
     llm_client = LLMClient(config=config, env_settings=env_settings)
+    recent_tweets: list[str] | None = None
+
+    # Pull recent written tweets to guide inspiration generations
+    try:
+        if config.llm.recent_tweet_context_limit > 0:
+            db = await get_database()
+            tweets_data = await db.get_written_tweets(
+                limit=config.llm.recent_tweet_context_limit
+            )
+            recent_tweets = [
+                tweet.get("text", "") for tweet in tweets_data if tweet.get("text")
+            ]
+    except Exception as exc:
+        logger.warning(
+            "recent_tweets_fetch_failed",
+            extra={"error": str(exc)},
+        )
 
     posts_batch_dicts = state.interesting_posts_queue[:threshold]
     posts_batch = [Post(**p) for p in posts_batch_dicts]
@@ -132,7 +150,9 @@ async def _process_inspiration_queue_async(
 
     try:
         for attempt in range(1, max_attempts + 1):
-            tweet_text = await llm_client.generate_inspiration_tweet(posts_batch)
+            tweet_text = await llm_client.generate_inspiration_tweet(
+                posts_batch, recent_tweets=recent_tweets
+            )
             logger.info(
                 "inspiration_tweet_generated",
                 extra={

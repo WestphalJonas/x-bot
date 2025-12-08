@@ -94,6 +94,12 @@ class LLMConfig(BaseModel):
     temperature: float = Field(
         default=0.7, ge=0.0, le=2.0, description="Sampling temperature"
     )
+    recent_tweet_context_limit: int = Field(
+        default=5,
+        ge=0,
+        le=50,
+        description="How many recent bot tweets to include as inspiration context",
+    )
     similarity_threshold: float = Field(
         default=0.85, ge=0.0, le=1.0, description="Duplicate detection threshold"
     )

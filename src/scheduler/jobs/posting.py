@@ -13,6 +13,7 @@ from src.core.graph.tweet_generation import (
 from src.core.llm import LLMClient
 from src.memory.chroma_client import ChromaMemory
 from src.state.manager import load_state, save_state
+from src.state.database import get_database
 from src.web.data_tracker import log_action, log_rejected_tweet, log_written_tweet
 from src.x.posting import post_tweet
 from src.x.session import AsyncTwitterSession
@@ -73,6 +74,25 @@ async def _post_autonomous_tweet_async(
         raise ValueError("At least one LLM provider API key is required.")
 
     llm_client = LLMClient(config=config, env_settings=env_settings)
+    recent_tweets: list[str] | None = None
+
+    # Fetch recent written tweets to use as style/context references
+    try:
+        if config.llm.recent_tweet_context_limit > 0:
+            db = await get_database()
+            tweets_data = await db.get_written_tweets(
+                limit=config.llm.recent_tweet_context_limit
+            )
+            recent_tweets = [
+                tweet.get("text", "")
+                for tweet in tweets_data
+                if tweet.get("text")
+            ]
+    except Exception as exc:
+        logger.warning(
+            "recent_tweets_fetch_failed",
+            extra={"error": str(exc)},
+        )
 
     chroma_memory: ChromaMemory | None = None
     try:
@@ -82,7 +102,9 @@ async def _post_autonomous_tweet_async(
 
     system_prompt = config.get_system_prompt()
     graph = build_tweet_generation_graph(
-        GenerationDependencies(llm_client=llm_client, memory=chroma_memory)
+        GenerationDependencies(
+            llm_client=llm_client, memory=chroma_memory, recent_tweets=recent_tweets
+        )
     )
 
     result_state = await graph.ainvoke(TweetGenerationState(system_prompt=system_prompt))

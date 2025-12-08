@@ -33,12 +33,15 @@ class GenerationDependencies:
 
     llm_client: LLMClient
     memory: ChromaMemory | None = None
+    recent_tweets: list[str] | None = None
 
 
 async def _generate_node(
     state: TweetGenerationState, deps: GenerationDependencies
 ) -> dict:
-    tweet_text = await deps.llm_client.generate_tweet(state.system_prompt)
+    tweet_text = await deps.llm_client.generate_tweet(
+        state.system_prompt, recent_tweets=deps.recent_tweets
+    )
     logger.info(
         "graph_generate_tweet",
         extra={"length": len(tweet_text), "attempts": state.attempts + 1},

@@ -32,6 +32,28 @@ Length: {min_tweet_length}-{max_tweet_length} characters
 
 Return ONLY the tweet text, no quotes, no explanation."""
 
+TWEET_GENERATION_WITH_CONTEXT_PROMPT = """Generate ONE tweet.
+
+Use these recent tweets (most recent first) as style/reference context:
+{recent_tweets}
+
+Requirements:
+- Be specific and concrete, not abstract or vague
+- Share an insight, opinion, observation, or useful information
+- Sound like a real person with expertise, not a marketing account
+- Natural language that reads well
+
+Avoid these patterns:
+- Starting with "I" or "Just"
+- Phrases: "excited to", "game-changer", "the future of", "it's fascinating", "in today's world"
+- Questions fishing for engagement ("What do you think?", "Anyone else?")
+- Hashtags or excessive emojis
+- Vague statements that could apply to anything
+
+Length: {min_tweet_length}-{max_tweet_length} characters
+
+Return ONLY the tweet text, no quotes, no explanation."""
+
 BRAND_CHECK_PROMPT = """Evaluate this tweet against the brand criteria:
 
 Brand:
@@ -78,6 +100,36 @@ INSPIRATION_TWEET_PROMPT = """Here are posts I found interesting:
 {posts_context}
 
 Your task: Create ONE original tweet inspired by themes or ideas from these posts.
+
+How to approach this:
+1. Identify a common thread, tension, or interesting angle across the posts
+2. Form your OWN take or observation related to that theme
+3. Make it feel like an original thought, not a response or summary
+
+Do NOT:
+- Summarize or paraphrase the posts
+- Reply to or quote them
+- Use generic reactions ("Great point!", "This is so true")
+- Reference the posts directly ("Seeing a lot of discussion about...")
+
+Your voice:
+- Tone: {tone}
+- Style: {style}
+- Topics: {topics}
+
+Length: {min_tweet_length}-{max_tweet_length} characters (strict limit)
+No hashtags.
+
+Return ONLY the tweet text."""
+
+INSPIRATION_TWEET_WITH_CONTEXT_PROMPT = """Here are posts I found interesting:
+
+{posts_context}
+
+Here are the bot's recent tweets (most recent first) for additional inspiration:
+{recent_tweets}
+
+Your task: Create ONE original tweet inspired by themes or ideas from these posts and the bot's recent output.
 
 How to approach this:
 1. Identify a common thread, tension, or interesting angle across the posts

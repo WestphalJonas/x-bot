@@ -184,6 +184,12 @@
                         <span class="range-value" id="similarity_threshold-value">{{ config.llm.similarity_threshold }}</span>
                     </div>
                 </div>
+                <div class="form-group">
+                    <label class="form-label" for="recent_tweet_context_limit">Recent Tweet Context (count)</label>
+                    <input type="number" class="form-input" id="recent_tweet_context_limit" name="recent_tweet_context_limit"
+                           value="{{ config.llm.recent_tweet_context_limit }}" min="0" max="50">
+                    <p class="form-hint">Number of latest bot tweets to include as style context</p>
+                </div>
             </div>
         </div>
     </section>
@@ -344,6 +350,7 @@
                 temperature: parseFloat(document.getElementById('temperature').value),
                 embedding_provider: document.getElementById('embedding_provider').value,
                 similarity_threshold: parseFloat(document.getElementById('similarity_threshold').value),
+                recent_tweet_context_limit: parseInt(document.getElementById('recent_tweet_context_limit').value),
             },
             rate_limits: {
                 max_posts_per_day: parseInt(document.getElementById('max_posts_per_day').value),
