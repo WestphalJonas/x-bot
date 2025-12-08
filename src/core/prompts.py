@@ -166,7 +166,7 @@ Post to evaluate:
 
 Evaluation criteria (in order of importance):
 1. TOPIC MATCH: Does the content relate to [{topics}]? (Most important)
-2. QUALITY: Is this substantive content vs. noise/spam/memes?
+2. QUALITY: Is this substantive content vs. noise/spam?
 3. ENGAGEMENT POTENTIAL: Would responding or being inspired by this add value?
 
 Score:
