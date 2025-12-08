@@ -176,6 +176,8 @@ class StateResponse(BaseModel):
 
     counters: dict[str, int]
     last_post_time: str | None
+    last_reply_time: str | None
+    last_reply_status: str | None
     mood: str
     interesting_posts_queue_size: int
     notifications_queue_size: int
@@ -434,6 +436,10 @@ async def get_state(memory: ChromaMemoryDep = None) -> StateResponse:
     if state.last_post_time:
         last_post_time = state.last_post_time.isoformat()
 
+    last_reply_time = None
+    if state.last_reply_time:
+        last_reply_time = state.last_reply_time.isoformat()
+
     last_notification_check = None
     if state.last_notification_check_time:
         last_notification_check = state.last_notification_check_time.isoformat()
@@ -441,6 +447,8 @@ async def get_state(memory: ChromaMemoryDep = None) -> StateResponse:
     return StateResponse(
         counters=state.counters,
         last_post_time=last_post_time,
+        last_reply_time=last_reply_time,
+        last_reply_status=state.last_reply_status,
         mood=state.mood,
         interesting_posts_queue_size=len(state.interesting_posts_queue),
         notifications_queue_size=len(state.notifications_queue),

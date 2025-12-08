@@ -175,3 +175,47 @@ Score:
 - If spam/low-effort/meme → NO
 
 Respond with only YES or NO."""
+
+
+NOTIFICATION_INTENT_PROMPT = """Classify whether to respond to this notification.
+
+Bot profile:
+- Tone: {tone}
+- Style: {style}
+- Topics: {topics}
+
+Notification:
+- Type: {notification_type}
+- From: {from_username}
+- Text: "{notification_text}"
+- Original post (if any): "{original_post_text}"
+
+Rules:
+- Approve only if the message is relevant to the topics and non-toxic.
+- Reject spam, ads, generic praise, abuse, or off-topic chatter.
+- Reject if the text is empty or meaningless.
+
+Return ONLY strict JSON (no code fences, no prose):
+{{"positive": true|false, "reason": "short reason"}}"""
+
+
+REPLY_GENERATION_PROMPT = """Write a concise reply to this notification.
+
+Context:
+- From: {from_username}
+- Notification type: {notification_type}
+- Notification text: "{notification_text}"
+- Original post (if any): "{original_post_text}"
+
+Voice:
+- Tone: {tone}
+- Style: {style}
+- Topics: {topics}
+
+Constraints:
+- Be specific and human, not generic or hypey.
+- No hashtags. No excessive emojis. Avoid banned phrases.
+- Length: {min_tweet_length}-{max_tweet_length} characters (strict).
+- Keep it respectful; no sarcasm or hostility.
+
+Return ONLY the reply text."""

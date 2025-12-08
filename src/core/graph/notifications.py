@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from langgraph.graph import END, StateGraph
@@ -52,17 +53,43 @@ async def _filter_and_queue(
 ) -> dict:
     bot_state = await load_state()
     processed_ids = set(bot_state.processed_notification_ids)
+    existing_ids = {
+        n.get("notification_id")
+        for n in bot_state.notifications_queue
+        if n.get("notification_id")
+    }
 
     fresh = [n for n in state.notifications if n.notification_id not in processed_ids]
+    # Track when the check was performed (UTC)
+    bot_state.last_notification_check_time = datetime.now(timezone.utc)
+
+    logger.info(
+        "notifications_fetched",
+        extra={
+            "fetched_count": len(state.notifications),
+            "fresh_count": len(fresh),
+            "queue_size_before": len(bot_state.notifications_queue),
+        },
+    )
 
     if fresh:
-        bot_state.notifications_queue.extend([n.model_dump() for n in fresh])
+        deduped = []
+        for notif in fresh:
+            # Skip if already in queue by ID
+            if notif.notification_id and notif.notification_id in existing_ids:
+                continue
+            deduped.append(notif)
+            if notif.notification_id:
+                existing_ids.add(notif.notification_id)
+
+        if deduped:
+            bot_state.notifications_queue.extend([n.model_dump() for n in deduped])
         if len(bot_state.notifications_queue) > QueueLimits.NOTIFICATIONS:
             bot_state.notifications_queue = bot_state.notifications_queue[
                 -QueueLimits.NOTIFICATIONS :
             ]
 
-        new_ids = [n.notification_id for n in fresh if n.notification_id]
+        new_ids = [n.notification_id for n in deduped if n.notification_id]
         bot_state.processed_notification_ids.extend(new_ids)
         if (
             len(bot_state.processed_notification_ids)
@@ -71,10 +98,11 @@ async def _filter_and_queue(
             bot_state.processed_notification_ids = bot_state.processed_notification_ids[
                 -QueueLimits.PROCESSED_NOTIFICATION_IDS :
             ]
+    await save_state(bot_state)
 
-        await save_state(bot_state)
-
-    await log_action(f"Checked notifications ({len(fresh)} new)")
+    await log_action(
+        f"Checked notifications ({len(fresh)} new, total queue {len(bot_state.notifications_queue)})"
+    )
     return {"new_notifications": fresh}
 
 

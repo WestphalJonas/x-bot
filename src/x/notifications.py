@@ -2,6 +2,7 @@
 
 import logging
 import time
+from collections import defaultdict
 from datetime import datetime
 
 from selenium.common.exceptions import TimeoutException
@@ -67,6 +68,7 @@ def check_notifications(driver, config: BotConfig, count: int = 20) -> list[Noti
                 return []
 
         notifications_found: list[Notification] = []
+        type_counts: dict[str, int] = defaultdict(int)
         seen_notification_ids: set[str] = set()
         max_scroll_attempts = 5
         scroll_attempts = 0
@@ -101,9 +103,10 @@ def check_notifications(driver, config: BotConfig, count: int = 20) -> list[Noti
                     notification_type = NotificationParser.extract_notification_type(
                         notification_element
                     )
+                    type_counts[notification_type] += 1
 
-                    # Filter for replies and mentions only (skip likes, retweets, follows)
-                    if notification_type not in ["reply", "mention"]:
+                    # Filter for replies/mentions. Allow unknown through for debugging so we can see content.
+                    if notification_type not in ["reply", "mention", "unknown"]:
                         logger.debug(
                             "skipping_notification_type",
                             extra={"type": notification_type},
@@ -176,6 +179,22 @@ def check_notifications(driver, config: BotConfig, count: int = 20) -> list[Noti
                     )
 
                     notifications_found.append(notification)
+
+                    # Emit debug samples for unknown notifications
+                    if notification_type == "unknown" and len(notifications_found) <= 3:
+                        raw_text = notification_element.text or ""
+                        inner_text = notification_element.get_attribute("innerText") or ""
+                        logger.info(
+                            "notification_unknown_sample",
+                            extra={
+                                "notification_id": notification_id,
+                                "from_username": username,
+                                "text_preview": text[:120],
+                                "raw_text_preview": raw_text[:200],
+                                "inner_text_preview": inner_text[:200],
+                                "url": url,
+                            },
+                        )
                     logger.info(
                         "notification_extracted",
                         extra={
@@ -222,6 +241,8 @@ def check_notifications(driver, config: BotConfig, count: int = 20) -> list[Noti
                 "notifications_found": len(notifications_found),
                 "target_count": count,
                 "scroll_attempts": scroll_attempts,
+                "type_counts": dict(type_counts),
+                "seen_ids": len(seen_notification_ids),
             },
         )
 

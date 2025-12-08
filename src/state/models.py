@@ -49,6 +49,12 @@ class AgentState(BaseModel):
     last_notification_check_time: datetime | None = Field(
         default=None, description="Timestamp of last notification check"
     )
+    last_reply_time: datetime | None = Field(
+        default=None, description="Timestamp of last successful reply"
+    )
+    last_reply_status: str | None = Field(
+        default=None, description="Status/result of the last reply attempt"
+    )
     processed_notification_ids: list[str] = Field(
         default_factory=list,
         description="List of processed notification IDs to avoid duplicates (max 100 IDs)",

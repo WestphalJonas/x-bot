@@ -31,12 +31,12 @@ scheduler:
   event_check_minutes: 15
   inspiration_batch_size: 25
   inspiration_check_minutes: 60
-  mention_check_minutes: 30
+  mention_check_minutes: 1
   post_interval_hours: 3.0
   post_jitter_hours: 1.0
   reading_check_minutes: 30
 selenium:
-  headless: true
+  headless: false
   max_delay_seconds: 3.0
   min_delay_seconds: 1.0
   user_agent_rotation: false

@@ -51,7 +51,7 @@
                 </div>
             </a>
             
-            <div class="stat-card stat-card-disabled" title="Coming soon">
+            <div class="stat-card">
                 <div class="stat-icon">🔔</div>
                 <div class="stat-content">
                     <div class="stat-value">{{ state.notifications_queue | length }}</div>
@@ -240,6 +240,14 @@
                     <span class="activity-icon">🔔</span>
                     <span class="activity-text">Notification check</span>
                     <span class="activity-time" data-timestamp="{{ state.last_notification_check_time.isoformat() if state.last_notification_check_time else '' }}" data-time-format="short"></span>
+                </div>
+                {% endif %}
+
+                {% if state.last_reply_time %}
+                <div class="activity-item">
+                    <span class="activity-icon">💬</span>
+                    <span class="activity-text">Last reply</span>
+                    <span class="activity-time" data-timestamp="{{ state.last_reply_time.isoformat() if state.last_reply_time else '' }}" data-time-format="short"></span>
                 </div>
                 {% endif %}
                 

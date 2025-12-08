@@ -363,6 +363,13 @@ class BotScheduler:
             func=func, job_id="process_inspiration_queue", trigger=trigger, **kwargs
         )
 
+    def setup_replies_job(self, func: Callable, **kwargs) -> None:
+        """Setup replies processing job."""
+        self._job_funcs["process_replies"] = func
+        interval_minutes = self.config.scheduler.mention_check_minutes
+        trigger = IntervalTrigger(minutes=interval_minutes)
+        self.add_job(func=func, job_id="process_replies", trigger=trigger, **kwargs)
+
     def reload_config(self) -> dict[str, str]:
         """Reload configuration and reschedule all jobs with updated intervals.
 
@@ -411,6 +418,14 @@ class BotScheduler:
                     f"inspiration_interval: {old_interval}m → {new_interval}m"
                 )
             self.setup_inspiration_job(self._job_funcs["process_inspiration_queue"])
+
+        # Reschedule replies job if interval changed
+        if "process_replies" in self._job_funcs:
+            old_interval = old_config.scheduler.mention_check_minutes
+            new_interval = new_config.scheduler.mention_check_minutes
+            if old_interval != new_interval:
+                changes.append(f"reply_interval: {old_interval}m → {new_interval}m")
+            self.setup_replies_job(self._job_funcs["process_replies"])
 
         logger.info(
             "config_reload_completed",

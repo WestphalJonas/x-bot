@@ -743,14 +743,51 @@ class NotificationParser:
         try:
             # Get all text from notification element
             notification_text = notification_element.text.lower()
+            inner_text = (
+                (notification_element.get_attribute("innerText") or "").lower()
+            )
 
-            # Check for reply indicators
-            if "replied" in notification_text or "antwort" in notification_text:
+            # Reply indicators (multi-language)
+            reply_keywords = [
+                "replied",
+                "antwort",  # de: antwort/antwortet/antwort an
+                "replying to",
+                "in reply to",
+                "geantwortet",
+            ]
+            if any(keyword in notification_text for keyword in reply_keywords) or any(
+                keyword in inner_text for keyword in reply_keywords
+            ):
                 return "reply"
 
-            # Check for mention indicators (mentions usually have @username in text)
-            if "@" in notification_text and "mentioned" in notification_text:
+            # Mention indicators (multi-language)
+            mention_keywords = [
+                "mentioned",
+                "erwähnt",
+                "erwaehnt",
+                "tagged you",
+            ]
+            if ("@" in notification_text or "@" in inner_text) and any(
+                keyword in notification_text or keyword in inner_text
+                for keyword in mention_keywords
+            ):
                 return "mention"
+
+            # If the notification contains an @ and the phrase "antwort an", treat as reply
+            if ("@" in notification_text or "@" in inner_text) and (
+                "antwort an" in notification_text or "antwort an" in inner_text
+            ):
+                return "reply"
+
+            # DOM-based reply detection: presence of reply button/icon
+            try:
+                reply_buttons = notification_element.find_elements(
+                    By.CSS_SELECTOR, 'button[data-testid="reply"]'
+                )
+                if reply_buttons:
+                    return "reply"
+            except Exception:
+                pass
 
             # Check for like indicators
             if "liked" in notification_text or "gefällt" in notification_text:
@@ -873,6 +910,16 @@ class NotificationParser:
                             return match.group(1)
             except Exception:
                 continue
+
+        # Fallback: hash URL/text for stability when no status link is present
+        try:
+            url = NotificationParser.extract_notification_url(notification_element)
+            text = NotificationParser.extract_notification_text(notification_element)
+            basis = url or text
+            if basis:
+                return f"notif-{abs(hash(basis))}"
+        except Exception:
+            pass
 
         return None
 

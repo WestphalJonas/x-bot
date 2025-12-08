@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from src.core.config import BotConfig, EnvSettings
@@ -10,10 +11,12 @@ from src.core.prompts import (
     BRAND_CHECK_PROMPT,
     INSPIRATION_TWEET_PROMPT,
     INSPIRATION_TWEET_WITH_CONTEXT_PROMPT,
+    NOTIFICATION_INTENT_PROMPT,
+    REPLY_GENERATION_PROMPT,
     TWEET_GENERATION_PROMPT,
     TWEET_GENERATION_WITH_CONTEXT_PROMPT,
 )
-from src.state.models import Post
+from src.state.models import Notification, Post
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +147,84 @@ class LLMClient:
     async def embed_text(self, text: str) -> list[float]:
         """Get embedding for text using configured embedding provider."""
         return await self._client.embed_text(text)
+
+    async def classify_notification_intent(
+        self, notification: Notification
+    ) -> tuple[bool, str]:
+        """Classify whether a notification merits a reply."""
+        prompt = NOTIFICATION_INTENT_PROMPT.format(
+            tone=self.config.personality.tone,
+            style=self.config.personality.style,
+            topics=", ".join(self.config.personality.topics),
+            notification_type=notification.type,
+            from_username=notification.from_username,
+            notification_text=notification.text,
+            original_post_text=notification.original_post_text or "N/A",
+        )
+
+        try:
+            result: ChatResult = await self._client.chat(
+                user_prompt=prompt,
+                system_prompt=None,
+                operation="intent_check",
+                temperature=0.2,
+                max_tokens=80,
+            )
+            data = json.loads(result.content)
+            positive = bool(data.get("positive", False))
+            reason = str(data.get("reason", "")).strip() or "No reason provided"
+            logger.info(
+                "notification_intent_classified",
+                extra={
+                    "notification_type": notification.type,
+                    "from_username": notification.from_username,
+                    "positive": positive,
+                },
+            )
+            return positive, reason
+        except Exception as exc:
+            logger.warning(
+                "notification_intent_parse_failed",
+                extra={
+                    "error": str(exc),
+                    "notification_type": notification.type,
+                    "from_username": notification.from_username,
+                },
+                exc_info=True,
+            )
+            return False, "Intent classification failed"
+
+    async def generate_reply(self, notification: Notification) -> str:
+        """Generate a reply to a notification."""
+        user_prompt = REPLY_GENERATION_PROMPT.format(
+            from_username=notification.from_username,
+            notification_type=notification.type,
+            notification_text=notification.text,
+            original_post_text=notification.original_post_text or "N/A",
+            tone=self.config.personality.tone,
+            style=self.config.personality.style,
+            topics=", ".join(self.config.personality.topics),
+            min_tweet_length=self.config.personality.min_tweet_length,
+            max_tweet_length=self.config.personality.max_tweet_length,
+        )
+
+        system_prompt = self.config.get_system_prompt()
+        result = await self._client.chat(
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            operation="reply",
+            temperature=self.config.llm.temperature,
+            max_tokens=self.config.llm.max_tokens,
+        )
+        reply_text = result.content.strip()
+        logger.info(
+            "reply_generated",
+            extra={
+                "from_username": notification.from_username,
+                "length": len(reply_text),
+            },
+        )
+        return reply_text
 
     @staticmethod
     def _format_recent_tweets(recent_tweets: list[str]) -> str:

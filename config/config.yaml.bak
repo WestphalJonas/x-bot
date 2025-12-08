@@ -7,13 +7,14 @@ llm:
   max_tokens: 150
   model: x-ai/grok-4.1-fast
   provider: openrouter
+  recent_tweet_context_limit: 5
   similarity_threshold: 0.85
   temperature: 1.3
   use_fallback: false
 personality:
   max_tweet_length: 280
   min_tweet_length: 60
-  style: cryptic
+  style: conversational
   tone: humorous
   topics:
   - AI
@@ -30,7 +31,7 @@ scheduler:
   event_check_minutes: 15
   inspiration_batch_size: 25
   inspiration_check_minutes: 60
-  mention_check_minutes: 30
+  mention_check_minutes: 5
   post_interval_hours: 3.0
   post_jitter_hours: 1.0
   reading_check_minutes: 30
