@@ -179,6 +179,20 @@ a:hover {
     transition: background var(--transition-fast), color var(--transition-fast);
 }
 
+.nav-github {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.nav-github svg {
+    width: 15px;
+    height: 15px;
+    display: block;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
 #site-nav a:hover,
 #site-nav a.active {
     background: var(--bg-hover);
