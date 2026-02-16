@@ -10,7 +10,7 @@ Autonomous Twitter/X bot built with Python, FastAPI, Selenium, and multi-provide
 
 ## Setup
 
-```powershell
+```bash
 uv sync
 Copy-Item config\env.template .env
 ```
@@ -48,4 +48,3 @@ Open dashboard:
 ```bash
 uv run pytest
 ```
-

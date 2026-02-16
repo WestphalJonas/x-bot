@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="X Bot is an autonomous Twitter/X agent with LLM generation, scheduler-driven workflows, memory deduplication, and a FastAPI dashboard.">
+    <title>X Bot | Autonomous AI Twitter Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <header class="site-header">
+        <a class="logo" href="#top">X Bot</a>
+        <button class="menu-toggle" id="menu-toggle" aria-label="Toggle navigation">Menu</button>
+        <nav id="site-nav">
+            <a href="#architecture">Architecture</a>
+            <a href="#status">Status</a>
+            <a href="#roadmap">Roadmap</a>
+            <a href="#quick-start">Quick Start</a>
+            <a href="./presentation/">Presentation</a>
+        </nav>
+    </header>
+
+    <main id="top">
+        <section class="hero section reveal">
+            <p class="eyebrow">Autonomous Social Agent</p>
+            <h1>X Bot</h1>
+            <p class="lead">A Python-based autonomous Twitter/X bot that reads, reasons, generates, evaluates, and posts with scheduler automation, memory-backed deduplication, and live observability.</p>
+            <div class="cta-row">
+                <a class="btn btn-primary" href="#architecture">View Architecture</a>
+                <a class="btn btn-secondary" href="#quick-start">Quick Start</a>
+                <a class="btn btn-secondary" href="./presentation/">Full Presentation</a>
+            </div>
+        </section>
+
+        <section class="section reveal" id="problem-solution">
+            <div class="section-head">
+                <h2>Problem and Solution</h2>
+                <p>Condensed from the presentation and aligned with implemented project behavior.</p>
+            </div>
+            <div class="grid two">
+                <article class="card">
+                    <h3>The Problem</h3>
+                    <ul>
+                        <li>Manual posting is time-intensive and inconsistent.</li>
+                        <li>Human-only workflows often miss engagement windows.</li>
+                        <li>High-volume timeline scanning is hard to maintain.</li>
+                    </ul>
+                </article>
+                <article class="card">
+                    <h3>The Solution</h3>
+                    <ul>
+                        <li>Autonomous posting with configurable personality.</li>
+                        <li>Timeline reading plus LLM-based interest detection.</li>
+                        <li>Inspiration queue for context-aware content generation.</li>
+                        <li>Notification monitoring and processing queue.</li>
+                        <li>Memory deduplication to avoid repeated content.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section reveal" id="architecture">
+            <div class="section-head">
+                <h2>Architecture and Pipeline</h2>
+                <p>Based on the project modules and the architecture slides.</p>
+            </div>
+            <div class="architecture-flow">
+                <div class="node">Scheduler<br><span>APScheduler</span></div>
+                <div class="arrow">-></div>
+                <div class="node">Jobs Layer<br><span>posting, reading, notifications, replies, inspiration</span></div>
+                <div class="arrow">-></div>
+                <div class="node">X Automation<br><span>Selenium + undetected-chromedriver</span></div>
+                <div class="arrow">-></div>
+                <div class="node">State + Dashboard<br><span>JSON + SQLite + FastAPI</span></div>
+            </div>
+            <div class="pipeline-grid">
+                <article class="mini-card">Read timeline posts</article>
+                <article class="mini-card">Run interest check</article>
+                <article class="mini-card">Queue interesting posts</article>
+                <article class="mini-card">Generate inspired tweet</article>
+                <article class="mini-card">Re-evaluate quality</article>
+                <article class="mini-card">Post to X</article>
+            </div>
+        </section>
+
+        <section class="section reveal" id="status">
+            <div class="section-head">
+                <h2>Current Status</h2>
+                <p>Roadmap-driven status summary.</p>
+            </div>
+            <div class="grid three">
+                <article class="card status implemented">
+                    <h3>Implemented</h3>
+                    <ul>
+                        <li>Scheduler and periodic jobs</li>
+                        <li>Frontpage reading and interest detection</li>
+                        <li>Inspiration-based posting flow</li>
+                        <li>Notification checking and queueing</li>
+                        <li>Memory deduplication via ChromaDB</li>
+                        <li>FastAPI dashboard and token analytics</li>
+                    </ul>
+                </article>
+                <article class="card status partial">
+                    <h3>Partial</h3>
+                    <ul>
+                        <li>Notification pipeline is present, but reply automation is incomplete.</li>
+                        <li>Roadmap has some legacy checkboxes not fully reflected in running behavior.</li>
+                    </ul>
+                </article>
+                <article class="card status planned">
+                    <h3>Planned / Missing</h3>
+                    <ul>
+                        <li>Positive intent detection for replies</li>
+                        <li>Automated reply generation and posting</li>
+                        <li>Trends integration and topic-aware enrichment</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section reveal" id="roadmap">
+            <div class="section-head">
+                <h2>Roadmap</h2>
+                <p>Near-term first, then post-MVP enhancements from ROADMAP.md.</p>
+            </div>
+            <div class="grid two">
+                <article class="card">
+                    <h3>Near-Term Priorities</h3>
+                    <ul>
+                        <li>Intent detection to filter toxic or low-quality interactions</li>
+                        <li>Reply generation for positive notifications</li>
+                        <li>Dashboard authentication and security hardening</li>
+                    </ul>
+                </article>
+                <article class="card">
+                    <h3>Post-MVP Enhancements</h3>
+                    <ul>
+                        <li>Trends ingestion and compliance-aware topic handling</li>
+                        <li>RSS and event ingestion pipelines</li>
+                        <li>Cost tracking per LLM provider</li>
+                        <li>Multi-account support</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section reveal" id="reliability">
+            <div class="section-head">
+                <h2>Reliability and Compliance</h2>
+            </div>
+            <div class="grid three">
+                <article class="card">
+                    <h3>Rate Limits</h3>
+                    <p>Per-day post and reply caps with UTC reset logic to reduce risk and enforce operational boundaries.</p>
+                </article>
+                <article class="card">
+                    <h3>Duplicate Prevention</h3>
+                    <p>Embedding-based similarity checks in ChromaDB (configured threshold 0.85) block repeated content.</p>
+                </article>
+                <article class="card">
+                    <h3>Operational Controls</h3>
+                    <p>Structured logging, scheduler guardrails, and stateful queues keep automation observable and predictable.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section reveal" id="dashboard">
+            <div class="section-head">
+                <h2>Dashboard and Observability</h2>
+                <p>FastAPI + Jinja2 + HTMX dashboard for live visibility and control.</p>
+            </div>
+            <div class="grid three">
+                <article class="card"><h3>Dashboard</h3><p>Status, activity stats, rate-limit progress.</p></article>
+                <article class="card"><h3>Posts</h3><p>Read, written, rejected, and interested queues.</p></article>
+                <article class="card"><h3>Analytics</h3><p>Hourly token graph and provider usage breakdown.</p></article>
+                <article class="card"><h3>Settings</h3><p>Live YAML updates with runtime config reload support.</p></article>
+                <article class="card"><h3>Logs</h3><p>Real-time log view for operations and diagnostics.</p></article>
+                <article class="card"><h3>Chat</h3><p>Interactive generation workflow in the web interface.</p></article>
+            </div>
+        </section>
+
+        <section class="section reveal" id="stack">
+            <div class="section-head">
+                <h2>Tech Stack</h2>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr><th>Layer</th><th>Technology</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Language</td><td>Python 3.13+</td></tr>
+                        <tr><td>AI Orchestration</td><td>LangChain + LangGraph</td></tr>
+                        <tr><td>LLM Providers</td><td>OpenRouter, OpenAI, Google, Anthropic</td></tr>
+                        <tr><td>Browser Automation</td><td>Selenium + undetected-chromedriver + selenium-stealth</td></tr>
+                        <tr><td>Scheduler</td><td>APScheduler</td></tr>
+                        <tr><td>Memory</td><td>ChromaDB</td></tr>
+                        <tr><td>State and Analytics</td><td>JSON state + SQLite (aiosqlite)</td></tr>
+                        <tr><td>Web</td><td>FastAPI + Jinja2 + HTMX + Chart.js</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="section reveal" id="quick-start">
+            <div class="section-head">
+                <h2>Quick Start</h2>
+                <p>Exact commands from README.md.</p>
+            </div>
+            <div class="grid two">
+                <article class="card">
+                    <h3>Requirements</h3>
+                    <ul>
+                        <li>Python 3.13+</li>
+                        <li>uv</li>
+                        <li>Google Chrome</li>
+                    </ul>
+                </article>
+                <article class="card">
+                    <h3>Environment Variables</h3>
+                    <p>Set <code>TWITTER_USERNAME</code>, <code>TWITTER_PASSWORD</code>, and at least one LLM API key.</p>
+                </article>
+            </div>
+            <div class="code-grid">
+                <article class="code-card">
+                    <h3>Setup</h3>
+<pre><code>uv sync
+Copy-Item config\env.template .env</code></pre>
+                </article>
+                <article class="code-card">
+                    <h3>Run Bot</h3>
+<pre><code>uv run python main.py</code></pre>
+                </article>
+                <article class="code-card">
+                    <h3>Run Dashboard</h3>
+<pre><code>uv run python -m src.web.app</code></pre>
+                </article>
+                <article class="code-card">
+                    <h3>Tests</h3>
+<pre><code>uv run pytest</code></pre>
+                </article>
+            </div>
+            <p class="dashboard-link">Dashboard URL: <code>http://localhost:8000</code></p>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <p>Project docs: <a href="../README.md">README</a> | <a href="../ROADMAP.md">ROADMAP</a> | <a href="./presentation/">Presentation</a></p>
+    </footer>
+
+    <script src="./script.js"></script>
+</body>
+</html>
