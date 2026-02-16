@@ -1,19 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#000000" id="theme-color-meta">
+    <meta name="color-scheme" content="dark light">
     <meta name="description" content="X Bot is an autonomous Twitter/X agent with LLM generation, scheduler-driven workflows, memory deduplication, and a FastAPI dashboard.">
     <title>X Bot | Autonomous AI Twitter Agent</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') ||
+                (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+            document.documentElement.setAttribute('data-theme', theme);
+            document.getElementById('theme-color-meta').content = theme === 'dark' ? '#000000' : '#ffffff';
+        })();
+    </script>
     <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
     <header class="site-header">
         <a class="logo" href="#top">X Bot</a>
-        <button class="menu-toggle" id="menu-toggle" aria-label="Toggle navigation">Menu</button>
         <nav id="site-nav">
             <a href="#architecture">Architecture</a>
             <a href="#status">Status</a>
@@ -21,6 +27,13 @@
             <a href="#quick-start">Quick Start</a>
             <a href="./presentation/">Presentation</a>
         </nav>
+        <div class="header-actions">
+            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                <span class="icon-sun">☀️</span>
+                <span class="icon-moon">🌙</span>
+            </button>
+            <button class="menu-toggle" id="menu-toggle" aria-label="Toggle navigation">Menu</button>
+        </div>
     </header>
 
     <main id="top">
@@ -38,7 +51,6 @@
         <section class="section reveal" id="problem-solution">
             <div class="section-head">
                 <h2>Problem and Solution</h2>
-                <p>Condensed from the presentation and aligned with implemented project behavior.</p>
             </div>
             <div class="grid two">
                 <article class="card">
@@ -65,24 +77,148 @@
         <section class="section reveal" id="architecture">
             <div class="section-head">
                 <h2>Architecture and Pipeline</h2>
-                <p>Based on the project modules and the architecture slides.</p>
             </div>
-            <div class="architecture-flow">
-                <div class="node">Scheduler<br><span>APScheduler</span></div>
-                <div class="arrow">-></div>
-                <div class="node">Jobs Layer<br><span>posting, reading, notifications, replies, inspiration</span></div>
-                <div class="arrow">-></div>
-                <div class="node">X Automation<br><span>Selenium + undetected-chromedriver</span></div>
-                <div class="arrow">-></div>
-                <div class="node">State + Dashboard<br><span>JSON + SQLite + FastAPI</span></div>
+            <div class="architecture-diagram">
+                <div class="arch-row">
+                    <article class="arch-node">
+                        <div class="arch-icon">🕒</div>
+                        <h3>Scheduler</h3>
+                        <p>APScheduler</p>
+                    </article>
+                    <div class="arch-arrow" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M5 12H19"></path>
+                            <path d="M12 5L19 12L12 19"></path>
+                        </svg>
+                    </div>
+                    <article class="arch-node">
+                        <div class="arch-icon">⚙️</div>
+                        <h3>Jobs Layer</h3>
+                        <p>Posting • Reading • Notifications • Replies • Inspiration</p>
+                    </article>
+                    <div class="arch-arrow" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M5 12H19"></path>
+                            <path d="M12 5L19 12L12 19"></path>
+                        </svg>
+                    </div>
+                    <article class="arch-node">
+                        <div class="arch-icon">𝕏</div>
+                        <h3>X Automation</h3>
+                        <p>Selenium + undetected-chromedriver + stealth</p>
+                    </article>
+                </div>
+                <div class="arch-row">
+                    <article class="arch-node">
+                        <div class="arch-icon">🧩</div>
+                        <h3>LangChain + LangGraph</h3>
+                        <p>Generation, validation, reading, and notifications workflows</p>
+                    </article>
+                    <div class="arch-arrow arch-arrow-bidirectional" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M5 12H19"></path>
+                            <path d="M8 9L5 12L8 15"></path>
+                            <path d="M16 9L19 12L16 15"></path>
+                        </svg>
+                    </div>
+                    <article class="arch-node">
+                        <div class="arch-icon">🤖</div>
+                        <h3>LLM Providers</h3>
+                        <p>OpenRouter • OpenAI • Google • Anthropic</p>
+                    </article>
+                    <div class="arch-arrow arch-arrow-bidirectional" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M5 12H19"></path>
+                            <path d="M8 9L5 12L8 15"></path>
+                            <path d="M16 9L19 12L16 15"></path>
+                        </svg>
+                    </div>
+                    <article class="arch-node">
+                        <div class="arch-icon">🧠</div>
+                        <h3>ChromaDB Memory</h3>
+                        <p>Embedding cache + duplicate detection (0.85)</p>
+                    </article>
+                </div>
+                <div class="arch-row">
+                    <article class="arch-node">
+                        <div class="arch-icon">💾</div>
+                        <h3>State Storage</h3>
+                        <p>JSON runtime state + SQLite analytics</p>
+                    </article>
+                    <div class="arch-arrow" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M5 12H19"></path>
+                            <path d="M12 5L19 12L12 19"></path>
+                        </svg>
+                    </div>
+                    <article class="arch-node">
+                        <div class="arch-icon">🌐</div>
+                        <h3>FastAPI Dashboard</h3>
+                        <p>Jinja2 + HTMX + Chart.js + live settings reload</p>
+                    </article>
+                </div>
             </div>
-            <div class="pipeline-grid">
-                <article class="mini-card">Read timeline posts</article>
-                <article class="mini-card">Run interest check</article>
-                <article class="mini-card">Queue interesting posts</article>
-                <article class="mini-card">Generate inspired tweet</article>
-                <article class="mini-card">Re-evaluate quality</article>
-                <article class="mini-card">Post to X</article>
+            <div class="pipeline-flow" aria-label="Content pipeline">
+                <article class="pipeline-step">
+                    <span class="pipeline-step-no">1</span>
+                    <h3>Read Timeline</h3>
+                    <p>Extract frontpage posts from X via Selenium.</p>
+                </article>
+                <span class="pipeline-connector" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M5 12H19"></path>
+                        <path d="M12 5L19 12L12 19"></path>
+                    </svg>
+                </span>
+                <article class="pipeline-step">
+                    <span class="pipeline-step-no">2</span>
+                    <h3>Interest Check</h3>
+                    <p>Score relevance against configured personality topics.</p>
+                </article>
+                <span class="pipeline-connector" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M5 12H19"></path>
+                        <path d="M12 5L19 12L12 19"></path>
+                    </svg>
+                </span>
+                <article class="pipeline-step">
+                    <span class="pipeline-step-no">3</span>
+                    <h3>Queue Signals</h3>
+                    <p>Store matching posts in the inspiration queue.</p>
+                </article>
+                <span class="pipeline-connector" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M5 12H19"></path>
+                        <path d="M12 5L19 12L12 19"></path>
+                    </svg>
+                </span>
+                <article class="pipeline-step">
+                    <span class="pipeline-step-no">4</span>
+                    <h3>Generate Draft</h3>
+                    <p>Create inspired tweet candidates from queued context.</p>
+                </article>
+                <span class="pipeline-connector" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M5 12H19"></path>
+                        <path d="M12 5L19 12L12 19"></path>
+                    </svg>
+                </span>
+                <article class="pipeline-step">
+                    <span class="pipeline-step-no">5</span>
+                    <h3>Quality Gate</h3>
+                    <p>Run re-evaluation and duplicate detection checks.</p>
+                </article>
+                <span class="pipeline-connector" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M5 12H19"></path>
+                        <path d="M12 5L19 12L12 19"></path>
+                    </svg>
+                </span>
+                <article class="pipeline-step pipeline-step-final">
+                    <span class="pipeline-step-no">6</span>
+                    <h3>Post to X</h3>
+                    <p>Publish approved content and persist state/analytics.</p>
+                </article>
             </div>
         </section>
 
@@ -228,7 +364,7 @@
                 <article class="code-card">
                     <h3>Setup</h3>
 <pre><code>uv sync
-Copy-Item config\env.template .env</code></pre>
+cp config/env.template .env</code></pre>
                 </article>
                 <article class="code-card">
                     <h3>Run Bot</h3>

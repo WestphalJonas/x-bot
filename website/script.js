@@ -1,6 +1,8 @@
 (function () {
     const menuToggle = document.getElementById("menu-toggle");
     const nav = document.getElementById("site-nav");
+    const themeToggle = document.getElementById("theme-toggle");
+    const themeMeta = document.getElementById("theme-color-meta");
     const navLinks = Array.from(document.querySelectorAll("#site-nav a[href^='#']"));
     const sections = navLinks
         .map((link) => document.querySelector(link.getAttribute("href")))
@@ -13,6 +15,25 @@
 
         navLinks.forEach((link) => {
             link.addEventListener("click", () => nav.classList.remove("open"));
+        });
+    }
+
+    if (themeToggle && themeMeta) {
+        const setTheme = (theme) => {
+            document.documentElement.setAttribute("data-theme", theme);
+            localStorage.setItem("theme", theme);
+            themeMeta.content = theme === "dark" ? "#000000" : "#ffffff";
+        };
+
+        themeToggle.addEventListener("click", () => {
+            const current = document.documentElement.getAttribute("data-theme");
+            setTheme(current === "dark" ? "light" : "dark");
+        });
+
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
+            if (!localStorage.getItem("theme")) {
+                setTheme(event.matches ? "dark" : "light");
+            }
         });
     }
 
