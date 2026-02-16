@@ -92,7 +92,7 @@
 }
 
 html {
-    font-size: 16px;
+    font-size: clamp(18px, 1.1vw + 8px, 24px);
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
 }
@@ -150,7 +150,7 @@ a:hover {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 60px 80px;
+    padding: 72px 96px;
     opacity: 0;
     visibility: hidden;
     transform: translateX(100%);
@@ -169,11 +169,11 @@ a:hover {
 }
 
 .slide-content {
-    max-width: 1100px;
+    max-width: 1360px;
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 32px;
+    gap: 36px;
 }
 
 /* ============================================
@@ -181,7 +181,7 @@ a:hover {
    ============================================ */
 
 .slide-title {
-    font-size: 3rem;
+    font-size: 3.25rem;
     font-weight: 800;
     color: var(--text-primary);
     line-height: 1.2;
@@ -193,28 +193,28 @@ a:hover {
 }
 
 .slide-subtitle {
-    font-size: 1.5rem;
+    font-size: 1.65rem;
     font-weight: 400;
     color: var(--text-secondary);
     line-height: 1.4;
 }
 
 h2 {
-    font-size: 2rem;
+    font-size: 2.2rem;
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 16px;
 }
 
 h3 {
-    font-size: 1.25rem;
+    font-size: 1.35rem;
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 12px;
 }
 
 p {
-    font-size: 1.125rem;
+    font-size: 1.2rem;
     color: var(--text-secondary);
     line-height: 1.7;
 }
@@ -234,11 +234,11 @@ p {
 }
 
 .title-slide .slide-title {
-    font-size: 4rem;
+    font-size: 4.5rem;
 }
 
 .title-slide .tagline {
-    font-size: 1.5rem;
+    font-size: 1.7rem;
     color: var(--text-secondary);
     font-style: italic;
     margin-top: 16px;
@@ -295,6 +295,20 @@ p {
 
 .cards-grid-3 {
     grid-template-columns: repeat(3, 1fr);
+}
+
+.problem-grid .card {
+    min-height: 220px;
+    padding: 28px;
+}
+
+.problem-grid .card-title {
+    font-size: 1.25rem;
+}
+
+.problem-grid p {
+    font-size: 1.05rem;
+    line-height: 1.65;
 }
 
 /* ============================================
@@ -389,7 +403,7 @@ ul, ol {
 
 li {
     margin-bottom: 12px;
-    font-size: 1.125rem;
+    font-size: 1.2rem;
     line-height: 1.6;
 }
 
@@ -478,6 +492,54 @@ li::marker {
     white-space: pre;
     overflow-x: auto;
     color: var(--text-primary);
+}
+
+.architecture-diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.arch-row {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.arch-node {
+    background: linear-gradient(160deg, var(--bg-secondary), var(--bg-tertiary));
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 18px 18px 16px;
+    width: 300px;
+    box-shadow: var(--shadow-sm);
+}
+
+.arch-node h3 {
+    margin: 8px 0 6px;
+    font-size: 1.05rem;
+}
+
+.arch-node p {
+    font-size: 0.95rem;
+    line-height: 1.45;
+}
+
+.arch-icon {
+    font-size: 1.75rem;
+    line-height: 1;
+}
+
+.arch-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-blue);
+    font-size: 1.5rem;
+    font-weight: 700;
+    min-width: 28px;
 }
 
 /* ============================================
@@ -751,6 +813,10 @@ li::marker {
    ============================================ */
 
 @media (max-width: 1024px) {
+    html {
+        font-size: 16px;
+    }
+
     .slide {
         padding: 40px 48px;
     }
@@ -771,6 +837,20 @@ li::marker {
     .cards-grid-2,
     .cards-grid-3 {
         grid-template-columns: 1fr;
+    }
+
+    .problem-grid .card {
+        min-height: 0;
+    }
+
+    .arch-node {
+        width: 100%;
+        max-width: 640px;
+    }
+
+    .arch-arrow {
+        transform: rotate(90deg);
+        min-height: 24px;
     }
 }
 
@@ -817,9 +897,16 @@ li::marker {
         padding: 10px 12px;
     }
     
-    .architecture {
-        font-size: 0.7rem;
-        padding: 16px;
+    .arch-node {
+        padding: 14px;
+    }
+
+    .arch-node p {
+        font-size: 0.9rem;
+    }
+
+    .problem-grid .card {
+        padding: 22px;
     }
 }
 

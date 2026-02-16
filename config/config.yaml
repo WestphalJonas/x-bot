@@ -31,7 +31,7 @@ scheduler:
   event_check_minutes: 15
   inspiration_batch_size: 25
   inspiration_check_minutes: 60
-  mention_check_minutes: 1
+  mention_check_minutes: 120
   post_interval_hours: 3.0
   post_jitter_hours: 1.0
   reading_check_minutes: 30

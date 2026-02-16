@@ -51,7 +51,7 @@
                     <h1 class="slide-title">The <span class="accent">Problem</span></h1>
                     <p class="slide-subtitle">Why build an autonomous social media bot?</p>
                     
-                    <div class="cards-grid" style="margin-top: 32px;">
+                    <div class="cards-grid cards-grid-2 problem-grid" style="margin-top: 32px;">
                         <div class="card">
                             <div class="card-header">
                                 <span class="card-icon">⏰</span>
@@ -121,7 +121,11 @@
                                 </tr>
                                 <tr>
                                     <td><span class="badge badge-red">📊 Web Dashboard</span></td>
-                                    <td>Real-time monitoring, analytics, and configuration</td>
+                                    <td>Real-time monitoring, analytics, settings, and live control</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge badge-blue">💬 Reply Workflows</span></td>
+                                    <td>Checks mentions/replies and queues notifications for processing</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -134,108 +138,64 @@
                 <div class="slide-content">
                     <h1 class="slide-title">System <span class="accent">Architecture</span></h1>
                     
-                    <div class="architecture">
-┌─────────────────────────────────────────────────────────────────────┐
-│                         X Bot Architecture                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐           │
-│  │   Scheduler  │───▶│    Jobs      │───▶│  X/Twitter   │           │
-│  │ (APScheduler)│    │  (Posting,   │    │  (Selenium)  │           │
-│  └──────────────┘    │  Reading...) │    └──────────────┘           │
-│                      └──────────────┘                                │
-│                             │                                        │
-│                             ▼                                        │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐           │
-│  │  LLM Layer   │◀───│    Core      │───▶│   Memory     │           │
-│  │ (LangChain)  │    │  (Interest,  │    │  (ChromaDB)  │           │
-│  │              │    │  Evaluation) │    └──────────────┘           │
-│  └──────────────┘    └──────────────┘                                │
-│         │                   │                                        │
-│         ▼                   ▼                                        │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐           │
-│  │  Providers   │    │    State     │    │     Web      │           │
-│  │  OpenRouter  │    │  (JSON+SQL)  │    │  Dashboard   │           │
-│  │  OpenAI/etc  │    └──────────────┘    │  (FastAPI)   │           │
-│  └──────────────┘                        └──────────────┘           │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘</div>
-                </div>
-            </div>
-
-            <!-- Slide 5: Tech Stack -->
-            <div class="slide" data-slide="5">
-                <div class="slide-content">
-                    <h1 class="slide-title">Tech <span class="accent">Stack</span></h1>
-                    
-                    <div class="two-col">
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Layer</th>
-                                        <th>Technology</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>Language</td>
-                                        <td><code>Python 3.14+</code> with type hints</td>
-                                    </tr>
-                                    <tr>
-                                        <td>AI/LLM</td>
-                                        <td>LangChain + LangGraph</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Providers</td>
-                                        <td>OpenRouter, OpenAI, Google, Anthropic</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Embeddings</td>
-                                        <td><code>text-embedding-3-small</code></td>
-                                    </tr>
-                                    <tr>
-                                        <td>Vector DB</td>
-                                        <td>ChromaDB (persistent)</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Browser</td>
-                                        <td>undetected-chromedriver + Stealth</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Scheduling</td>
-                                        <td>APScheduler</td>
-                                    </tr>
-                                    <tr>
-                                        <td>State</td>
-                                        <td>JSON + SQLite</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div>
-                            <div class="card" style="margin-bottom: 16px;">
-                                <div class="card-header">
-                                    <span class="card-icon">🌐</span>
-                                    <span class="card-title">Web Dashboard</span>
-                                </div>
-                                <ul style="margin-top: 8px;">
-                                    <li>FastAPI backend</li>
-                                    <li>Jinja2 + HTMX</li>
-                                    <li>Chart.js analytics</li>
-                                    <li>Pydantic v2 validation</li>
-                                </ul>
+                    <div class="architecture-diagram">
+                        <div class="arch-row">
+                            <div class="arch-node">
+                                <div class="arch-icon">🕒</div>
+                                <h3>Scheduler</h3>
+                                <p>APScheduler</p>
                             </div>
-                            <div class="highlight-box success">
-                                <strong>Type Safety:</strong> Full type hints with Pydantic models throughout the codebase
+                            <div class="arch-arrow">→</div>
+                            <div class="arch-node">
+                                <div class="arch-icon">⚙️</div>
+                                <h3>Jobs Layer</h3>
+                                <p>Posting • Reading • Notifications • Replies • Inspiration</p>
+                            </div>
+                            <div class="arch-arrow">→</div>
+                            <div class="arch-node">
+                                <div class="arch-icon">𝕏</div>
+                                <h3>X Automation</h3>
+                                <p>Selenium + undetected-chromedriver + stealth</p>
+                            </div>
+                        </div>
+                        <div class="arch-row">
+                            <div class="arch-node">
+                                <div class="arch-icon">🧩</div>
+                                <h3>LangChain + LangGraph</h3>
+                                <p>Generation, validation, reading, notifications workflows</p>
+                            </div>
+                            <div class="arch-arrow">↔</div>
+                            <div class="arch-node">
+                                <div class="arch-icon">🤖</div>
+                                <h3>LLM Providers</h3>
+                                <p>OpenRouter • OpenAI • Google • Anthropic</p>
+                            </div>
+                            <div class="arch-arrow">↔</div>
+                            <div class="arch-node">
+                                <div class="arch-icon">🧠</div>
+                                <h3>ChromaDB Memory</h3>
+                                <p>Embedding cache + duplicate detection (0.85)</p>
+                            </div>
+                        </div>
+                        <div class="arch-row">
+                            <div class="arch-node">
+                                <div class="arch-icon">💾</div>
+                                <h3>State Storage</h3>
+                                <p>JSON runtime state + SQLite analytics</p>
+                            </div>
+                            <div class="arch-arrow">→</div>
+                            <div class="arch-node">
+                                <div class="arch-icon">🌐</div>
+                                <h3>FastAPI Dashboard</h3>
+                                <p>Jinja2 + HTMX + Chart.js + live settings reload</p>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Slide 6: Personality System -->
-            <div class="slide" data-slide="6">
+            <!-- Slide 5: Personality System -->
+            <div class="slide" data-slide="5">
                 <div class="slide-content">
                     <h1 class="slide-title">Personality <span class="accent">System</span></h1>
                     <p class="slide-subtitle">Configurable bot personality via YAML</p>
@@ -268,8 +228,8 @@
                 </div>
             </div>
 
-            <!-- Slide 7: Content Pipeline -->
-            <div class="slide" data-slide="7">
+            <!-- Slide 6: Content Pipeline -->
+            <div class="slide" data-slide="6">
                 <div class="slide-content">
                     <h1 class="slide-title">Content <span class="accent">Pipeline</span></h1>
                     <p class="slide-subtitle">From timeline reading to intelligent posting</p>
@@ -313,8 +273,8 @@
                 </div>
             </div>
 
-            <!-- Slide 8: Memory System -->
-            <div class="slide" data-slide="8">
+            <!-- Slide 7: Memory System -->
+            <div class="slide" data-slide="7">
                 <div class="slide-content">
                     <h1 class="slide-title">Memory & <span class="accent">Deduplication</span></h1>
                     <p class="slide-subtitle">ChromaDB vector storage for intelligent memory</p>
@@ -330,7 +290,8 @@
                                     <li>Every tweet embedded before storage</li>
                                     <li>Cosine similarity for duplicate detection</li>
                                     <li>Configurable threshold: <code>0.85</code></li>
-                                    <li>Metadata: timestamps, topics, engagement</li>
+                                    <li>Metadata persisted: timestamps, provider, operation</li>
+                                    <li>Backed by <code>data/chroma/</code> for persistence</li>
                                 </ul>
                             </div>
                             
@@ -357,7 +318,7 @@
             </div>
 
             <!-- Slide 9: Web Dashboard -->
-            <div class="slide" data-slide="9">
+            <div class="slide" data-slide="8">
                 <div class="slide-content">
                     <h1 class="slide-title">Web <span class="accent">Dashboard</span></h1>
                     <p class="slide-subtitle">Full monitoring and configuration interface</p>
@@ -414,7 +375,7 @@
             </div>
 
             <!-- Slide 10: Rate Limiting & Compliance -->
-            <div class="slide" data-slide="10">
+            <div class="slide" data-slide="9">
                 <div class="slide-content">
                     <h1 class="slide-title">Rate Limits & <span class="accent">Compliance</span></h1>
                     
@@ -467,10 +428,10 @@
             </div>
 
             <!-- Slide 11: Current Status -->
-            <div class="slide" data-slide="11">
+            <div class="slide" data-slide="10">
                 <div class="slide-content">
                     <h1 class="slide-title">Current <span class="accent">Status</span></h1>
-                    <p class="slide-subtitle">MVP Development Progress</p>
+                    <p class="slide-subtitle">Roadmap and repository snapshot</p>
                     
                     <div class="status-list" style="margin-top: 24px;">
                         <div class="status-item">
@@ -485,8 +446,8 @@
                         </div>
                         <div class="status-item">
                             <span class="status-icon">🔶</span>
-                            <span class="status-text"><strong>Phase 3:</strong> Notifications & Intent</span>
-                            <span class="status-badge badge-orange">Partial</span>
+                            <span class="status-text"><strong>Phase 3:</strong> Notifications & Reply Flow</span>
+                            <span class="status-badge badge-orange">In Progress</span>
                         </div>
                         <div class="status-item">
                             <span class="status-icon">✅</span>
@@ -497,27 +458,27 @@
                     
                     <div class="stat-cards" style="margin-top: 32px;">
                         <div class="stat-card">
-                            <div class="stat-value">85%</div>
-                            <div class="stat-label">MVP Complete</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value">16</div>
-                            <div class="stat-label">Core Modules</div>
-                        </div>
-                        <div class="stat-card">
                             <div class="stat-value">4</div>
                             <div class="stat-label">LLM Providers</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-value">6</div>
-                            <div class="stat-label">Dashboard Pages</div>
+                            <div class="stat-label">Scheduler Jobs</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">5</div>
+                            <div class="stat-label">Graph Workflows</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">8</div>
+                            <div class="stat-label">Dashboard Templates</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Slide 12: Demo -->
-            <div class="slide" data-slide="12">
+            <!-- Slide 11: Demo -->
+            <div class="slide" data-slide="11">
                 <div class="slide-content" style="text-align: center;">
                     <h1 class="slide-title">Live <span class="accent">Demo</span></h1>
                     <p class="slide-subtitle">Dashboard walkthrough</p>
@@ -555,6 +516,81 @@
                     
                     <div class="highlight-box" style="margin-top: 32px; text-align: center;">
                         <strong>🖥️ Open Dashboard:</strong> <code>http://localhost:8000</code>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 12: Tech Stack -->
+            <div class="slide" data-slide="12">
+                <div class="slide-content">
+                    <h1 class="slide-title">Tech <span class="accent">Stack</span></h1>
+                    
+                    <div class="two-col">
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Layer</th>
+                                        <th>Technology</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Language</td>
+                                        <td><code>Python >= 3.13</code> with full type hints</td>
+                                    </tr>
+                                    <tr>
+                                        <td>AI Orchestration</td>
+                                        <td>LangChain + LangGraph</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Providers</td>
+                                        <td>OpenRouter, OpenAI, Google, Anthropic</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Configured Model</td>
+                                        <td><code>x-ai/grok-4.1-fast</code> (OpenRouter)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Embeddings</td>
+                                        <td><code>text-embedding-3-small</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Vector DB</td>
+                                        <td>ChromaDB (persistent local storage)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Browser</td>
+                                        <td>undetected-chromedriver + selenium-stealth</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Scheduling</td>
+                                        <td>APScheduler (background scheduler)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>State & Analytics</td>
+                                        <td>JSON state + SQLite (<code>aiosqlite</code>)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <div class="card" style="margin-bottom: 16px;">
+                                <div class="card-header">
+                                    <span class="card-icon">🌐</span>
+                                    <span class="card-title">Web Layer</span>
+                                </div>
+                                <ul style="margin-top: 8px;">
+                                    <li>FastAPI backend</li>
+                                    <li>Jinja2 templates + HTMX partials</li>
+                                    <li>Chart.js token analytics</li>
+                                    <li>Pydantic v2 + pydantic-settings</li>
+                                </ul>
+                            </div>
+                            <div class="highlight-box success">
+                                <strong>Repo Facts:</strong> 6 scheduler jobs, 5 LangGraph workflows, and async I/O across state and database layers.
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
