@@ -1,8 +1,10 @@
 """Browser driver management with undetected-chromedriver."""
 
 import logging
+import platform
 import random
 import re
+import subprocess
 import time
 
 import undetected_chromedriver as uc
@@ -12,6 +14,64 @@ from selenium_stealth import stealth
 from src.core.config import BotConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _detect_browser_major_version() -> int | None:
+    """Best-effort detection of installed Chrome major version."""
+    system = platform.system()
+
+    # Windows: read installed Chrome version from registry.
+    if system == "Windows":
+        try:
+            import winreg
+
+            reg_paths = [
+                r"SOFTWARE\Google\Chrome\BLBeacon",
+                r"SOFTWARE\WOW6432Node\Google\Chrome\BLBeacon",
+            ]
+            for reg_path in reg_paths:
+                for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+                    try:
+                        with winreg.OpenKey(hive, reg_path) as key:
+                            version, _ = winreg.QueryValueEx(key, "version")
+                    except OSError:
+                        continue
+
+                    match = re.match(r"(\d+)\.", str(version))
+                    if match:
+                        return int(match.group(1))
+        except Exception as exc:
+            logger.debug("browser_major_detection_failed_windows", extra={"error": str(exc)})
+        return None
+
+    # macOS / Linux: query common Chrome executable names.
+    commands = []
+    if system == "Darwin":
+        commands.append(
+            ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "--version"]
+        )
+    else:
+        commands.extend(
+            [
+                ["google-chrome", "--version"],
+                ["google-chrome-stable", "--version"],
+                ["chromium-browser", "--version"],
+                ["chromium", "--version"],
+            ]
+        )
+
+    for cmd in commands:
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except Exception:
+            continue
+
+        output = (result.stdout or result.stderr or "").strip()
+        match = re.search(r"(\d+)\.", output)
+        if match:
+            return int(match.group(1))
+
+    return None
 
 
 def create_driver(config: BotConfig) -> uc.Chrome:
@@ -49,8 +109,12 @@ def create_driver(config: BotConfig) -> uc.Chrome:
     def _create_uc_driver(version_main: int | None = None) -> uc.Chrome:
         return uc.Chrome(options=_build_options(), version_main=version_main)
 
+    browser_major = _detect_browser_major_version()
+    if browser_major is not None:
+        logger.info("browser_major_detected", extra={"browser_major": browser_major})
+
     try:
-        driver = _create_uc_driver()
+        driver = _create_uc_driver(version_main=browser_major)
     except SessionNotCreatedException as exc:
         # Handle Chrome/ChromeDriver major-version mismatch by retrying with
         # the browser's major version extracted from the Selenium error.
