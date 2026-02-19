@@ -3,6 +3,27 @@
 {% block title %}Logs - X Bot{% endblock %}
 {% block page_title %}Logs{% endblock %}
 
+{% block head %}
+<style>
+    #log-output,
+    #log-output .log-line {
+        color: #e7e9ea !important;
+    }
+
+    #log-output .log-error {
+        color: #f87171 !important;
+    }
+
+    #log-output .log-warning {
+        color: #fbbf24 !important;
+    }
+
+    #log-output .log-debug {
+        color: #9ca3af !important;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="logs-container">
     <div class="logs-toolbar">
@@ -119,4 +140,3 @@
 })();
 </script>
 {% endblock %}
-

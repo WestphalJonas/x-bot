@@ -640,10 +640,19 @@ li::marker {
 }
 
 .status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
     font-size: 0.75rem;
-    padding: 4px 10px;
+    width: 128px;
+    min-height: 32px;
+    padding: 0 10px;
     border-radius: var(--radius-full);
     font-weight: 600;
+    line-height: 1;
+    box-sizing: border-box;
+    white-space: nowrap;
 }
 
 /* ============================================
@@ -837,6 +846,45 @@ li::marker {
 .qa-slide .big-icon {
     font-size: 5rem;
     margin-bottom: 24px;
+}
+
+.qa-source-card {
+    width: min(560px, 100%);
+    text-align: center;
+}
+
+.qa-source-card .card-header {
+    justify-content: center;
+}
+
+.qa-source-card p {
+    text-align: center;
+}
+
+.qa-qr-slot {
+    margin: 16px auto 0;
+    width: 180px;
+    height: 180px;
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qa-qr-placeholder {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.qa-qr-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: calc(var(--radius-md) - 2px);
 }
 
 /* ============================================

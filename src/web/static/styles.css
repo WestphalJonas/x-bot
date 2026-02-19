@@ -162,6 +162,7 @@
   border-radius: 0 0 8px 8px;
   padding: 10px 14px;
   overflow: auto;
+  color: #e7e9ea;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -182,7 +183,11 @@
 }
 
 .log-line.log-debug {
-  color: #71767b;
+  color: #9ca3af;
+}
+
+[data-theme="light"] .log-line {
+  color: #e7e9ea;
 }
 
 /* Legacy status pill (keep for backward compat) */
@@ -1448,6 +1453,26 @@ button {
 .total-cell {
     font-weight: 700;
     color: var(--accent-blue);
+}
+
+[data-theme="light"] .analytics-container,
+[data-theme="light"] #analytics-content,
+[data-theme="light"] .analytics-section,
+[data-theme="light"] .summary-card,
+[data-theme="light"] .entries-table td,
+[data-theme="light"] .breakdown-label,
+[data-theme="light"] .pagination-info {
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .summary-label,
+[data-theme="light"] .time-cell,
+[data-theme="light"] .entries-table th {
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .provider-badge.provider-anthropic {
+    color: #0f1419;
 }
 
 /* ============================================

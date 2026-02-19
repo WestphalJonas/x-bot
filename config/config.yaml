@@ -34,9 +34,9 @@ scheduler:
   mention_check_minutes: 120
   post_interval_hours: 3.0
   post_jitter_hours: 1.0
-  reading_check_minutes: 30
+  reading_check_minutes: 5
 selenium:
-  headless: false
+  headless: true
   max_delay_seconds: 3.0
   min_delay_seconds: 1.0
   user_agent_rotation: false
