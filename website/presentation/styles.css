@@ -588,6 +588,26 @@ li::marker {
     grid-template-columns: 3fr 2fr;
 }
 
+.slide-five-layout {
+    grid-template-columns: 2fr 3fr;
+    align-items: start;
+}
+
+.slide-five-config {
+    white-space: pre;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    max-height: 64vh;
+    overflow: auto;
+}
+
+/* Slide 5 YAML syntax highlighting */
+.slide-five-config .yaml-key { color: var(--accent-blue); }
+.slide-five-config .yaml-string { color: var(--accent-green); }
+.slide-five-config .yaml-number { color: var(--accent-orange); }
+.slide-five-config .yaml-boolean { color: var(--accent-purple); }
+.slide-five-config .yaml-list { color: var(--text-secondary); }
+
 /* ============================================
    Status Items
    ============================================ */
