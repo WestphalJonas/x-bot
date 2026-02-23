@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from typing import Any
 
 from langchain_anthropic import ChatAnthropic
@@ -208,6 +209,7 @@ class LangChainLLM:
                 continue
 
             try:
+                started = time.perf_counter()
                 messages: list[BaseMessage] = []
                 if system_prompt:
                     messages.append(SystemMessage(content=system_prompt))
@@ -236,20 +238,25 @@ class LangChainLLM:
                     "llm_success",
                     extra={
                         "provider": provider,
+                        "model": self._model_for_provider(provider),
                         "operation": operation,
                         "length": len(content),
+                        "duration_ms": round((time.perf_counter() - started) * 1000, 1),
                     },
                 )
                 return ChatResult(content=content, provider=provider, usage=usage)
 
             except Exception as exc:
+                duration_ms = round((time.perf_counter() - started) * 1000, 1)
                 last_error = exc
                 logger.warning(
                     "llm_provider_failed",
                     extra={
                         "provider": provider,
+                        "model": self._model_for_provider(provider),
                         "operation": operation,
                         "error": str(exc),
+                        "duration_ms": duration_ms,
                     },
                 )
                 continue
