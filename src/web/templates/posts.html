@@ -4,7 +4,7 @@
 {% block page_title %}Posts{% endblock %}
 
 {% block content %}
-<div class="posts-container" x-data='postsPage({{ active_tab | tojson }})'>
+<div class="posts-page posts-container" x-data='postsPage({{ active_tab | tojson }})'>
     <!-- Tabs Navigation -->
     <div class="posts-header">
         <div class="tabs">

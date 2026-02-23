@@ -22,7 +22,7 @@
 
 {% block content %}
 <div
-    class="dashboard-grid"
+    class="dashboard-page dashboard-grid"
     x-data='dashboardPage({{ {"paused": state.paused, "startedAt": (state.bot_started_at.isoformat() if state.bot_started_at else none), "nextRunsCount": (state.next_run_delays | length if state.paused else 0)} | tojson }})'
     x-init="init()"
 >

@@ -25,7 +25,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="logs-container" x-data="logsPage()" x-init="init()">
+<div class="logs-page logs-container" x-data="logsPage()" x-init="init()">
     <div class="logs-toolbar">
         <div class="logs-toolbar-left">
             <span id="log-status" class="log-status" :class="`log-status-${statusType}`" x-text="statusText">Connecting…</span>

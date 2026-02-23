@@ -14,7 +14,7 @@
 
 {% block content %}
 <div
-    class="settings-container"
+    class="settings-page settings-container"
     x-data='settingsPage({{ {"topics": config.personality.topics, "temperature": config.llm.temperature, "similarity_threshold": config.llm.similarity_threshold} | tojson }})'
     x-init="init()"
 >
