@@ -16,7 +16,7 @@ from src.core.llm import LLMClient
 from src.state.database import get_database
 from src.state.manager import load_state, save_state
 from src.state.models import Post
-from src.web.data_tracker import log_action
+from src.monitoring.data_tracker import log_action
 from src.x.reading import read_frontpage_posts
 from src.x.session import AsyncTwitterSession
 

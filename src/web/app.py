@@ -2,9 +2,7 @@
 
 import os
 from contextlib import asynccontextmanager
-from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI
@@ -12,60 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from src.core.config import BotConfig
 from src.web.auth import require_session, require_session_or_redirect
+from src.web.deps import get_chroma_memory, get_config
 from src.web.settings import get_auth_settings
-
-# ChromaDB is optional - may not be available on all Python versions
-try:
-    from src.memory.chroma_client import ChromaMemory
-
-    CHROMA_AVAILABLE = True
-except ImportError:
-    ChromaMemory = None  # type: ignore
-    CHROMA_AVAILABLE = False
 
 WEB_DIR = Path(__file__).parent
 TEMPLATES_DIR = WEB_DIR / "templates"
 STATIC_DIR = WEB_DIR / "static"
-
-
-@lru_cache
-def get_config() -> BotConfig:
-    """Get the loaded bot configuration.
-
-    Uses lru_cache to ensure only one config instance is created.
-    This is the proper FastAPI dependency injection pattern.
-    """
-    return BotConfig.load()
-
-
-@lru_cache
-def get_chroma_memory() -> object | None:
-    """Get the ChromaDB memory client if available.
-
-    Uses lru_cache to ensure only one memory client instance is created.
-    Returns None if ChromaDB is not available or no API key is configured.
-    """
-    if not CHROMA_AVAILABLE or ChromaMemory is None:
-        return None
-
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        return None
-
-    try:
-        return ChromaMemory(
-            config=get_config(),
-            openai_api_key=openai_api_key,
-        )
-    except Exception:
-        return None
-
-
-# Type aliases for dependency injection
-ConfigDep = Annotated[BotConfig, Depends(get_config)]
-ChromaMemoryDep = Annotated[object | None, Depends(get_chroma_memory)]
 
 
 @asynccontextmanager

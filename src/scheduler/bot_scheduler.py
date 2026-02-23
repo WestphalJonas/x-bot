@@ -91,6 +91,11 @@ class JobQueue:
         with self._lock:
             return len(self._queue)
 
+    def pending_job_ids(self) -> list[str]:
+        """Return a snapshot of pending job IDs."""
+        with self._lock:
+            return list(self._pending_job_ids)
+
 
 # Global job queue instance
 _job_queue = JobQueue()

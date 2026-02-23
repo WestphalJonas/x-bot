@@ -14,7 +14,7 @@ from src.constants import QueueLimits
 from src.core.config import BotConfig, EnvSettings
 from src.state.manager import load_state, save_state
 from src.state.models import Notification
-from src.web.data_tracker import log_action
+from src.monitoring.data_tracker import log_action
 from src.x.notifications import check_notifications as check_notifications_func
 from src.x.session import AsyncTwitterSession
 

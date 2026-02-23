@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 from src.scheduler.bot_scheduler import get_job_queue
 from src.state.database import get_database
 from src.state.manager import load_state
-from src.web.app import ChromaMemoryDep, ConfigDep, get_chroma_memory, get_config
+from src.web.deps import ChromaMemoryDep, ConfigDep
 
 if TYPE_CHECKING:
     from src.memory.chroma_client import ChromaMemory
@@ -83,7 +83,7 @@ async def dashboard(
     job_queue = get_job_queue()
     job_queue_info = {
         "size": job_queue.size(),
-        "pending_jobs": list(job_queue._pending_job_ids),
+        "pending_jobs": job_queue.pending_job_ids(),
         "is_empty": job_queue.is_empty(),
     }
 

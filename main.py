@@ -112,7 +112,18 @@ def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
 
     def run_job():
         """Execute the actual job."""
-        job_func(config, env_settings)
+        scheduler = None
+        try:
+            from src.scheduler.bot_scheduler import get_scheduler
+
+            scheduler = get_scheduler()
+        except Exception:
+            scheduler = None
+
+        active_config = scheduler.config if scheduler is not None else config
+        # Reload env each run so rotated credentials/keys are picked up without restart.
+        active_env_settings = load_env_settings()
+        job_func(active_config, active_env_settings or env_settings)
 
     def process_queue():
         """Process any pending jobs in the queue."""
@@ -156,7 +167,7 @@ def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
 def main():
     """Main entry point for the bot scheduler."""
     # Load environment variables
-    load_dotenv()
+    load_dotenv(dotenv_path=Path("config/.env"))
 
     # Load configuration
     config_path = Path("config/config.yaml")
@@ -169,7 +180,11 @@ def main():
     try:
         validate_env_settings(env_settings)
     except ValueError as e:
-        logger.error("configuration_error", extra={"error": str(e)})
+        logger.error(
+            "configuration_error: %s",
+            str(e),
+            extra={"error": str(e)},
+        )
         sys.exit(1)
 
     # Initialize scheduler

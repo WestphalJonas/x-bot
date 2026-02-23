@@ -14,7 +14,7 @@ from src.core.config import BotConfig, EnvSettings
 from src.core.llm import LLMClient
 from src.state.manager import load_state, save_state
 from src.state.models import Notification
-from src.web.data_tracker import log_action
+from src.monitoring.data_tracker import log_action
 from src.x.replies import post_reply
 from src.x.session import AsyncTwitterSession
 

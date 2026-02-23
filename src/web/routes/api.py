@@ -19,8 +19,8 @@ from src.core.llm import LLMClient
 from src.scheduler.bot_scheduler import get_job_queue, get_scheduler
 from src.state.database import get_database
 from src.state.manager import load_state, save_state
-from src.web.app import ChromaMemoryDep, ConfigDep, get_config
-from src.web.data_tracker import log_action, log_written_tweet
+from src.web.deps import ChromaMemoryDep, ConfigDep, get_config
+from src.monitoring.data_tracker import log_action, log_written_tweet
 from src.x.posting import post_tweet
 from src.x.session import AsyncTwitterSession
 
@@ -246,25 +246,27 @@ async def _run_chat(message: str, config: BotConfig) -> ChatMessageResponse:
     """Call the LLM pipeline with retry/backoff."""
     env_settings = _load_env_settings()
     llm_client = LLMClient(config=config, env_settings=env_settings)
+    try:
+        system_prompt = config.get_system_prompt()
+        result = await llm_client.chat(
+            user_prompt=message,
+            system_prompt=system_prompt,
+            operation="manual_chat",
+            max_tokens=config.llm.max_tokens,
+            temperature=config.llm.temperature,
+        )
 
-    system_prompt = config.get_system_prompt()
-    result = await llm_client.chat(
-        user_prompt=message,
-        system_prompt=system_prompt,
-        operation="manual_chat",
-        max_tokens=config.llm.max_tokens,
-        temperature=config.llm.temperature,
-    )
-
-    usage = result.usage
-    return ChatMessageResponse(
-        reply=result.content,
-        provider=result.provider,
-        prompt_tokens=usage.prompt_tokens if usage else 0,
-        completion_tokens=usage.completion_tokens if usage else 0,
-        total_tokens=usage.total_tokens if usage else 0,
-        timestamp=datetime.utcnow().isoformat() + "Z",
-    )
+        usage = result.usage
+        return ChatMessageResponse(
+            reply=result.content,
+            provider=result.provider,
+            prompt_tokens=usage.prompt_tokens if usage else 0,
+            completion_tokens=usage.completion_tokens if usage else 0,
+            total_tokens=usage.total_tokens if usage else 0,
+            timestamp=datetime.utcnow().isoformat() + "Z",
+        )
+    finally:
+        await llm_client.close()
 
 
 @router.get("/posts/read", response_model=PostsListResponse)
@@ -463,7 +465,7 @@ async def get_job_queue_status() -> JobQueueResponse:
     job_queue = get_job_queue()
 
     # Get pending job IDs from the queue
-    pending_jobs = list(job_queue._pending_job_ids)
+    pending_jobs = job_queue.pending_job_ids()
 
     return JobQueueResponse(
         size=job_queue.size(),
