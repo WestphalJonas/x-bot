@@ -36,7 +36,7 @@ scheduler:
   post_jitter_hours: 1.0
   reading_check_minutes: 5
 selenium:
-  headless: true
+  headless: false
   max_delay_seconds: 3.0
   min_delay_seconds: 1.0
   user_agent_rotation: false
