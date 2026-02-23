@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark light;
+  }
+
+  [x-cloak] {
+    display: none !important;
+  }
+}
+
+@layer components {
+  .xb-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition;
+  }
+
+  .xb-card {
+    @apply rounded-2xl border;
+  }
+
+  .xb-input {
+    @apply w-full rounded-xl border px-3 py-2 text-sm;
+  }
+
+  .xb-toast {
+    @apply fixed right-4 top-4 z-50 rounded-xl border px-4 py-3 shadow-lg;
+  }
+}

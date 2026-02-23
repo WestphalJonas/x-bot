@@ -12,7 +12,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
 from src.core.config import BotConfig, EnvSettings
 from src.core.llm import LLMClient
@@ -241,7 +241,11 @@ def _load_env_settings() -> EnvSettings:
     )
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    reraise=True,
+)
 async def _run_chat(message: str, config: BotConfig) -> ChatMessageResponse:
     """Call the LLM pipeline with retry/backoff."""
     env_settings = _load_env_settings()
@@ -479,10 +483,32 @@ async def chat_with_agent(
     payload: ChatMessageRequest, config: ConfigDep
 ) -> ChatMessageResponse:
     """Chat with the agent using the configured LLM pipeline."""
+    message = (payload.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    env_settings = _load_env_settings()
+    has_provider = any(
+        [
+            env_settings.get("OPENAI_API_KEY"),
+            env_settings.get("OPENROUTER_API_KEY"),
+            env_settings.get("GOOGLE_API_KEY"),
+            env_settings.get("ANTHROPIC_API_KEY"),
+        ]
+    )
+    if not has_provider:
+        raise HTTPException(
+            status_code=400,
+            detail="No LLM API key configured (.env). Set at least one of OPENAI_API_KEY, OPENROUTER_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY.",
+        )
+
     try:
-        return await _run_chat(payload.message, config)
+        return await _run_chat(message, config)
+    except RetryError as exc:
+        root_exc = exc.last_attempt.exception() if exc.last_attempt else exc
+        raise HTTPException(status_code=500, detail=f"Chat failed: {root_exc}") from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Chat failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Chat failed: {exc}") from exc
 
 
 @router.post("/posts/manual", response_model=ManualPostResponse)

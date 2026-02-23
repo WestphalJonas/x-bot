@@ -23,6 +23,7 @@ personality:
   - blockchain
   - web3
   - memes
+  - cats
 rate_limits:
   max_posts_per_day: 15
   max_replies_per_day: 50

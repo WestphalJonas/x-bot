@@ -15,6 +15,8 @@ from src.web.deps import get_chroma_memory, get_config
 from src.web.settings import get_auth_settings
 
 WEB_DIR = Path(__file__).parent
+PROJECT_ROOT = WEB_DIR.parent.parent
+ENV_FILE = PROJECT_ROOT / "config" / ".env"
 TEMPLATES_DIR = WEB_DIR / "templates"
 STATIC_DIR = WEB_DIR / "static"
 
@@ -23,7 +25,7 @@ STATIC_DIR = WEB_DIR / "static"
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
     # Load environment before dependency evaluation and warm caches to avoid first-request latency
-    load_dotenv()
+    load_dotenv(dotenv_path=ENV_FILE)
 
     get_config()
     get_chroma_memory()
@@ -44,7 +46,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     # Ensure environment variables are loaded before settings are evaluated
-    load_dotenv()
+    load_dotenv(dotenv_path=ENV_FILE)
     auth_settings = get_auth_settings()
 
     app = FastAPI(

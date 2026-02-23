@@ -4,7 +4,7 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block header_actions %}
-<button class="btn btn-secondary" onclick="location.reload()">
+<button class="btn btn-secondary" @click="window.location.reload()">
     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
         <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
     </svg>
@@ -14,14 +14,18 @@
     class="btn btn-primary"
     id="pause-resume-btn"
     data-paused="{{ 'true' if state.paused else 'false' }}"
-    onclick="toggleSchedulerPause()"
+    @click="window.dispatchEvent(new CustomEvent('xbot:dashboard-toggle'))"
 >
     {% if state.paused %}Resume{% else %}Pause{% endif %}
 </button>
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-grid">
+<div
+    class="dashboard-grid"
+    x-data='dashboardPage({{ {"paused": state.paused, "startedAt": (state.bot_started_at.isoformat() if state.bot_started_at else none), "nextRunsCount": (state.next_run_delays | length if state.paused else 0)} | tojson }})'
+    x-init="init()"
+>
     <!-- Stats Cards - Activity -->
     <div class="stats-row">
         <div class="stats-category">
@@ -86,7 +90,7 @@
                         <span class="status-value" id="running-since" data-started="{{ state.bot_started_at.isoformat() }}">
                             <span data-timestamp="{{ state.bot_started_at.isoformat() }}" data-time-format="short"></span>
                         </span>
-                        <span class="status-subtext" id="uptime"></span>
+                        <span class="status-subtext" id="uptime" x-text="uptimeText"></span>
                         {% else %}
                         <span class="status-value">Not started</span>
                         {% endif %}
@@ -123,10 +127,11 @@
                             class="status-value"
                             id="scheduler-status"
                             data-paused="{{ 'true' if state.paused else 'false' }}"
+                            x-text="schedulerStatusLabel()"
                         >
                             {% if state.paused %}Paused{% else %}Running{% endif %}
                         </span>
-                        <span class="status-subtext" id="next-run-subtext">
+                        <span class="status-subtext" id="next-run-subtext" x-text="schedulerSubtext()">
                             {% if state.paused %}
                                 Next runs captured: {{ state.next_run_delays | length }}
                             {% else %}
@@ -292,78 +297,4 @@
     </div>
 </div>
 
-<script>
-// Calculate and display uptime
-function updateUptime() {
-    const element = document.getElementById('running-since');
-    const uptimeElement = document.getElementById('uptime');
-    if (!element || !uptimeElement) return;
-    
-    const started = new Date(element.dataset.started);
-    const now = new Date();
-    const diff = now - started;
-    
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    let uptimeStr = '';
-    if (days > 0) uptimeStr += `${days}d `;
-    if (hours > 0 || days > 0) uptimeStr += `${hours}h `;
-    uptimeStr += `${minutes}m`;
-    
-    uptimeElement.textContent = uptimeStr + ' uptime';
-}
-
-updateUptime();
-setInterval(updateUptime, 60000);
-
-async function toggleSchedulerPause() {
-    const btn = document.getElementById('pause-resume-btn');
-    const statusEl = document.getElementById('scheduler-status');
-    const subtextEl = document.getElementById('next-run-subtext');
-
-    if (!btn || !statusEl) return;
-
-    const wasPaused = btn.dataset.paused === 'true';
-    const url = wasPaused ? '/api/scheduler/resume' : '/api/scheduler/pause';
-    const originalContent = btn.innerHTML;
-
-    btn.disabled = true;
-    btn.innerHTML = wasPaused ? 'Resuming...' : 'Pausing...';
-
-    try {
-        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-        const data = await response.json();
-
-        if (!response.ok || data.status === 'error') {
-            throw new Error(data.reason || 'Request failed');
-        }
-
-        const isPausedNow = data.status === 'paused';
-        btn.dataset.paused = isPausedNow ? 'true' : 'false';
-        statusEl.dataset.paused = isPausedNow ? 'true' : 'false';
-        btn.innerHTML = isPausedNow ? 'Resume' : 'Pause';
-        statusEl.textContent = isPausedNow ? 'Paused' : 'Running';
-
-        if (subtextEl) {
-            if (isPausedNow) {
-                const count = data.next_runs ? Object.keys(data.next_runs).length : 0;
-                subtextEl.textContent = `Next runs captured: ${count}`;
-            } else {
-                subtextEl.textContent = 'Next run recalculated on resume';
-            }
-        }
-    } catch (error) {
-        console.error('Scheduler toggle failed:', error);
-        btn.innerHTML = 'Error';
-        setTimeout(() => {
-            btn.innerHTML = originalContent;
-        }, 2000);
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-</script>
 {% endblock %}
