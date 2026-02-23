@@ -1,6 +1,6 @@
 # X Bot
 
-Autonomous Twitter/X bot built with Python, Selenium, LangChain/LangGraph, ChromaDB memory, and a FastAPI dashboard.
+Autonomous Twitter/X bot built with Python, Selenium, LangChain/LangGraph, ChromaDB memory, and a FastAPI dashboard (`Jinja2 + HTMX + Alpine.js + Tailwind CSS`).
 
 ## What It Does
 
@@ -16,15 +16,20 @@ Autonomous Twitter/X bot built with Python, Selenium, LangChain/LangGraph, Chrom
 - Python `3.13+`
 - `uv` package manager
 - Google Chrome installed
+- Node.js + npm (for Tailwind CSS build)
 
 ## Setup (Bash)
 
 ```bash
 uv sync
-cp config/env.template .env
+cp config/env.template config/.env
+npm install
+npm run tailwind:build
 ```
 
-### Required `.env` values
+Note: The web dashboard loads environment variables from `config/.env`.
+
+### Required `config/.env` values
 
 ```env
 TWITTER_USERNAME=your_x_username
@@ -37,7 +42,7 @@ GOOGLE_API_KEY=
 ANTHROPIC_API_KEY=
 ```
 
-### Optional `.env` values
+### Optional `config/.env` values
 
 ```env
 LANGCHAIN_TRACING_V2=false
@@ -64,7 +69,7 @@ Generate an Argon2 hash:
 uv run python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('your-password'))"
 ```
 
-Use the generated hash as `AUTH_PASSWORD_HASH`.
+Use the generated hash as `AUTH_PASSWORD_HASH` in `config/.env`.
 
 ## Configuration
 
@@ -93,6 +98,24 @@ uv run python -m src.web.app
 Dashboard URL:
 
 - `http://localhost:8000`
+
+## Frontend UI (Tailwind)
+
+The dashboard UI is styled via Tailwind CSS and built to:
+
+- `src/web/static/build.css`
+
+Useful commands:
+
+```bash
+npm run tailwind:build
+npm run tailwind:watch
+```
+
+Notes:
+
+- `src/web/static/styles.css` (legacy CSS) is no longer loaded by the dashboard.
+- After changing templates or `src/web/static/tailwind/input.css`, rebuild Tailwind (or run watch mode).
 
 ## Tests
 
