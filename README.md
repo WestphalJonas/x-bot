@@ -99,6 +99,50 @@ Dashboard URL:
 
 - `http://localhost:8000`
 
+## Docker / Docker Compose
+
+The project can run in Docker with two services:
+
+- `bot`: scheduler + posting/reading/reply jobs
+- `web`: FastAPI dashboard on port `8000`
+
+### Prerequisites
+
+- Docker
+- Docker Compose (Docker Desktop includes it)
+- `config/.env` configured (same file as local setup)
+
+### Start with Compose
+
+```bash
+cp config/env.template config/.env  # if not created yet
+docker compose up --build
+```
+
+This starts:
+
+- Bot scheduler in background mode
+- Web dashboard at `http://localhost:8000`
+
+Persistent directories are mounted from the host:
+
+- `./config` (includes `cookie.json`)
+- `./data`
+- `./logs`
+
+### Start only one service
+
+```bash
+docker compose up --build bot
+docker compose up --build web
+```
+
+### Notes for Selenium / Chrome in Docker
+
+- Set `selenium.headless: true` in `config/config.yaml` for container usage.
+- `shm_size: 1gb` is configured to reduce Chrome crashes in containers.
+- First start may take longer because dependencies and Chrome are installed during image build.
+
 ## Frontend UI (Tailwind)
 
 The dashboard UI is styled via Tailwind CSS and built to:
