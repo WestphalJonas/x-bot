@@ -29,6 +29,16 @@
     <div class="logs-toolbar">
         <div class="logs-toolbar-left">
             <span id="log-status" class="log-status" :class="`log-status-${statusType}`" x-text="statusText">Connecting…</span>
+            <div class="logs-segment" role="group" aria-label="Log format">
+                <label class="logs-segment-item">
+                    <input type="radio" name="log-format" id="log-format-human" value="human" checked />
+                    <span>Human</span>
+                </label>
+                <label class="logs-segment-item">
+                    <input type="radio" name="log-format" id="log-format-json" value="json" />
+                    <span>JSON</span>
+                </label>
+            </div>
         </div>
         <div class="logs-toolbar-right">
             <select id="log-level" class="logs-select" title="Log level filter">
@@ -51,6 +61,8 @@
             </label>
         </div>
     </div>
-    <pre id="log-output" class="log-output"></pre>
+    <div class="logs-frame">
+        <pre id="log-output" class="log-output"></pre>
+    </div>
 </div>
 {% endblock %}

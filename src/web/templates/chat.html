@@ -14,80 +14,91 @@
 
 {% block content %}
 <div class="chat-page chat-container" x-data="chatPage()" x-init="init()">
-    <!-- Toast Notification -->
     <div id="chat-toast" class="toast hidden">
         <span class="toast-icon">✓</span>
         <span class="toast-message">Message sent</span>
     </div>
 
-    <!-- Model Info -->
-    <div class="section-card">
+    <section class="section-card">
         <div class="section-header">
-            <h2 class="section-title">💬 Agent Chat</h2>
-            <p class="section-description">Draft content manually using the configured model</p>
+            <div>
+                <h2 class="section-title">Agent Chat</h2>
+                <p class="section-description">Draft tweets, refine ideas, and iterate with the configured persona</p>
+            </div>
+            <div class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium"
+                 style="border-color: var(--xb-border); background: var(--xb-surface-2); color: var(--xb-text-muted);">
+                <span class="inline-block h-2 w-2 rounded-full bg-emerald-400"></span>
+                Ready
+            </div>
         </div>
         <div class="section-content">
-            <div class="config-grid">
-                <div class="config-item">
-                    <span class="config-label">Provider</span>
-                    <span class="config-value">{{ config.llm.provider }}</span>
+            <div class="grid gap-3 md:grid-cols-3">
+                <div class="rounded-xl border p-3" style="border-color: var(--xb-border); background: var(--xb-surface-2);">
+                    <div class="config-label">Provider</div>
+                    <div class="mt-1 text-sm font-semibold">{{ config.llm.provider }}</div>
                 </div>
-                <div class="config-item">
-                    <span class="config-label">Model</span>
-                    <span class="config-value font-mono">{{ config.llm.model }}</span>
+                <div class="rounded-xl border p-3" style="border-color: var(--xb-border); background: var(--xb-surface-2);">
+                    <div class="config-label">Model</div>
+                    <div class="mt-1 text-sm font-semibold font-mono break-all">{{ config.llm.model }}</div>
                 </div>
-                <div class="config-item">
-                    <span class="config-label">Tone</span>
-                    <span class="config-value">{{ config.personality.tone | capitalize }}</span>
+                <div class="rounded-xl border p-3" style="border-color: var(--xb-border); background: var(--xb-surface-2);">
+                    <div class="config-label">Tone</div>
+                    <div class="mt-1 text-sm font-semibold">{{ config.personality.tone | capitalize }}</div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Chat Window -->
-    <div class="section-card">
+    <section class="section-card overflow-hidden">
         <div class="section-header">
-            <h2 class="section-title">Conversation</h2>
+            <div>
+                <h2 class="section-title">Conversation</h2>
+                <p class="section-description">Streaming responses enabled</p>
+            </div>
+            <div id="chat-status" class="chat-status-text"></div>
         </div>
-        <div class="section-content">
-            <div id="chat-window" class="chat-messages" aria-live="polite">
-                <div class="chat-message chat-message-assistant">
-                    <div class="chat-avatar">🤖</div>
-                    <div class="chat-bubble">
-                        <div class="chat-text">Hi! I'm ready to help draft content. Share your idea and I'll create options using the configured personality.</div>
-                        <div class="chat-info">Agent</div>
-                    </div>
-                </div>
+        <div class="section-content pt-0">
+            <div id="chat-window" class="chat-messages rounded-2xl border p-3 md:p-4" aria-live="polite"
+                 style="border-color: var(--xb-border); background: color-mix(in srgb, var(--xb-surface) 92%, black 8%);">
+                <!-- Rendered by Alpine JS -->
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Input Form -->
-    <div class="section-card">
-        <div class="section-content">
+    <section class="section-card overflow-hidden">
+        <div class="section-header">
+            <h2 class="section-title">Compose</h2>
+            <p class="section-description">Press Enter to send, Shift+Enter for a new line</p>
+        </div>
+        <div class="section-content pt-0">
             <form id="chat-form" class="chat-input-form" @submit.prevent="sendMessage($event)">
-                <div class="form-group">
-                    <label class="form-label" for="chat-input">Your Message</label>
-                    <textarea 
-                        id="chat-input" 
-                        name="message" 
-                        class="form-input" 
-                        rows="3" 
-                        placeholder="Ask the agent to draft a tweet, generate ideas, or refine content..."
+                <div class="rounded-2xl border p-3" style="border-color: var(--xb-border); background: var(--xb-surface-2);">
+                    <label class="sr-only" for="chat-input">Your Message</label>
+                    <textarea
+                        id="chat-input"
+                        name="message"
+                        class="form-input border-0 bg-transparent p-0 focus:ring-0"
+                        rows="4"
+                        placeholder="Ask for a tweet draft, a thread outline, alternate hooks, or a rewrite in a different tone..."
                         required
                     ></textarea>
                 </div>
                 <div class="chat-form-actions">
-                    <div id="chat-status" class="chat-status-text"></div>
-                    <button type="submit" class="btn btn-primary" id="chat-send-btn">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                        </svg>
-                        Send
-                    </button>
+                    <div class="chat-status-text" id="chat-status-secondary"></div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="btn btn-secondary" @click="insertPrompt('Give me 5 tweet ideas about ')">
+                            Idea Prompt
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="chat-send-btn">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                            Send
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
-    </div>
+    </section>
 </div>
 {% endblock %}

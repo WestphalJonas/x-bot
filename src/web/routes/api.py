@@ -1,8 +1,10 @@
 """API routes for the X bot dashboard."""
 
 import asyncio
+import json
 import logging
 import os
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +28,32 @@ from src.x.session import AsyncTwitterSession
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+_DASHBOARD_LEVEL_EMOJI = {
+    "DEBUG": "🔍",
+    "INFO": "ℹ️",
+    "WARNING": "⚠️",
+    "ERROR": "❌",
+    "CRITICAL": "🔥",
+}
+
+_DASHBOARD_TASK_EMOJI = {
+    "scheduler": "⏰",
+    "posting": "📝",
+    "reading": "📖",
+    "notifications": "🔔",
+    "replies": "💬",
+    "llm": "🧠",
+    "auth": "🔐",
+    "web": "🌐",
+    "db": "💾",
+    "state": "💾",
+    "browser": "🧭",
+    "driver": "🧭",
+    "x": "🧭",
+    "memory": "🧠",
+    "system": "🚀",
+}
 
 CONTROL_URL = (os.getenv("SCHEDULER_CONTROL_URL") or "").strip() or None
 CONTROL_HOST = (os.getenv("SCHEDULER_CONTROL_HOST", "127.0.0.1") or "127.0.0.1").strip()
@@ -74,8 +102,126 @@ async def _get_control(path: str) -> dict[str, Any]:
         return {"status": "error", "reason": f"control_request_failed: {exc}"}
 
 
+def _tail_lines(path: Path, limit: int = 20) -> list[str]:
+    """Read the last N lines from a text file."""
+    if not path.exists():
+        return []
+    limit = max(1, min(limit, 200))
+    try:
+        from collections import deque
+
+        with path.open("r", encoding="utf-8", errors="ignore") as f:
+            return [line.rstrip("\n") for line in deque(f, maxlen=limit)]
+    except Exception:
+        return []
+
+
+def _humanize_log_line(line: str) -> str:
+    """Render a JSONL log line into the app's human-readable console style."""
+    raw = (line or "").strip()
+    if not raw:
+        return ""
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return raw
+
+    if not isinstance(payload, dict):
+        return raw
+
+    timestamp = str(payload.get("timestamp") or "")
+    time_part = ""
+    if "T" in timestamp:
+        try:
+            time_part = timestamp.split("T", 1)[1][:8]
+        except Exception:
+            time_part = ""
+
+    level = str(payload.get("level") or "INFO").upper()
+    task = str(payload.get("task") or "system")
+    message = str(
+        payload.get("message_human")
+        or payload.get("message")
+        or payload.get("event")
+        or "log"
+    )
+
+    context = payload.get("context")
+    context_text = ""
+    if isinstance(context, dict) and context:
+        preferred_keys = [
+            "job_id",
+            "operation",
+            "provider",
+            "model",
+            "post_id",
+            "notification_id",
+            "username",
+            "from_username",
+            "duration_ms",
+            "status",
+            "error",
+        ]
+        parts: list[str] = []
+        seen: set[str] = set()
+        for key in preferred_keys:
+            if key in context:
+                parts.append(f"{key}={context.get(key)}")
+                seen.add(key)
+            if len(parts) >= 4:
+                break
+        if len(parts) < 4:
+            for key in sorted(context.keys()):
+                if key in seen:
+                    continue
+                parts.append(f"{key}={context.get(key)}")
+                if len(parts) >= 4:
+                    break
+        if parts:
+            context_text = " | " + " ".join(parts)
+
+    level_emoji = _DASHBOARD_LEVEL_EMOJI.get(level, "")
+    task_emoji = _DASHBOARD_TASK_EMOJI.get(task, "")
+    icons = " ".join(part for part in [level_emoji, task_emoji] if part).strip()
+    icons = f"{icons} " if icons else ""
+    task_label = f"[{task}]"
+
+    prefix = " ".join(part for part in [time_part, f"{icons}{task_label}".strip()] if part)
+    if prefix:
+        return f"{prefix} {message}{context_text}".strip()
+    return f"{task_label} {message}{context_text}".strip()
+
+
+def _summarize_queue_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Create a compact queue item summary for dashboard previews."""
+    text = str(
+        item.get("text")
+        or item.get("original_post_text")
+        or item.get("post_text")
+        or item.get("content")
+        or ""
+    ).strip()
+    if len(text) > 120:
+        text = text[:117].rstrip() + "..."
+
+    timestamp = item.get("timestamp")
+    if isinstance(timestamp, datetime):
+        timestamp = timestamp.isoformat()
+
+    return {
+        "id": item.get("notification_id") or item.get("post_id") or item.get("id"),
+        "type": item.get("type") or item.get("post_type"),
+        "username": item.get("from_username") or item.get("username"),
+        "display_name": item.get("from_display_name") or item.get("display_name"),
+        "text": text,
+        "timestamp": timestamp,
+        "url": item.get("url"),
+    }
+
+
 async def _log_stream(
-    log_path: Path, level: str | None, tail_bytes: int
+    log_path: Path, level: str | None, tail_bytes: int, human: bool = False
 ) -> AsyncIterator[str]:
     """Async generator that streams log lines as SSE data."""
     if not log_path.exists():
@@ -108,15 +254,21 @@ async def _log_stream(
                 continue
 
             payload = line.rstrip("\n")
+            if human:
+                payload = _humanize_log_line(payload)
+                if not payload:
+                    continue
             yield f"data: {payload}\n\n"
 
 
 @router.get("/logs/stream")
-async def stream_logs(level: str | None = None, tail_bytes: int = 8000):
+async def stream_logs(
+    level: str | None = None, tail_bytes: int = 8000, human: bool = False
+):
     """Stream live logs from bot.log as Server-Sent Events."""
     tail_bytes = max(tail_bytes, 0)
     log_path = Path("logs/bot.log")
-    generator = _log_stream(log_path, level, tail_bytes)
+    generator = _log_stream(log_path, level, tail_bytes, human=human)
     return StreamingResponse(generator, media_type="text/event-stream")
 
 
@@ -241,6 +393,24 @@ class ManualPostResponse(BaseModel):
     message: str
     text: str
     posted_at: str
+
+
+def _chunk_text_for_stream(text: str, max_chunk_len: int = 24) -> list[str]:
+    """Split text into small chunks for incremental UI streaming."""
+    if not text:
+        return []
+    parts = re.findall(r"\S+\s*|\s+", text)
+    chunks: list[str] = []
+    current = ""
+    for part in parts:
+        if current and len(current) + len(part) > max_chunk_len:
+            chunks.append(current)
+            current = part
+        else:
+            current += part
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def _load_env_settings() -> EnvSettings:
@@ -495,6 +665,150 @@ async def get_job_queue_status() -> JobQueueResponse:
     )
 
 
+@router.get("/scheduler/jobs")
+async def get_scheduler_jobs() -> dict[str, Any]:
+    """Get scheduler jobs and next-run timing snapshot."""
+    result = await _get_scheduler_jobs()
+    if result.get("status") == "error":
+        raise HTTPException(status_code=500, detail=result.get("reason", "Failed"))
+    return result
+
+
+@router.post("/scheduler/run/{job_id}")
+async def run_scheduler_job(job_id: str) -> dict[str, Any]:
+    """Trigger a scheduler job to run immediately."""
+    result = await _run_scheduler_job_now(job_id)
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=500, detail=result.get("reason", "Run job failed")
+        )
+    return result
+
+
+@router.get("/logs/tail")
+async def get_logs_tail(lines: int = 20, human: bool = True) -> dict[str, Any]:
+    """Return tail of bot.log for dashboard preview."""
+    tail = _tail_lines(Path("logs/bot.log"), limit=lines)
+    if human:
+        tail = [rendered for rendered in (_humanize_log_line(line) for line in tail) if rendered]
+    return {"status": "ok", "lines": tail}
+
+
+@router.get("/dashboard/overview")
+async def get_dashboard_overview(config: ConfigDep) -> dict[str, Any]:
+    """Aggregated dashboard snapshot for home view polling."""
+    state = await load_state()
+    job_queue = get_job_queue()
+    now = datetime.now(timezone.utc)
+
+    db_stats: dict[str, Any] = {}
+    hourly_tokens: list[dict[str, Any]] = []
+    try:
+        db = await get_database()
+        db_stats = await db.get_stats()
+        hourly_tokens = await db.get_hourly_token_usage(hours=12)
+    except Exception:
+        db_stats = {}
+        hourly_tokens = []
+
+    scheduler_result = await _get_scheduler_jobs()
+    jobs = scheduler_result.get("jobs", []) if scheduler_result.get("status") == "ok" else []
+
+    health_result = await _get_control("/health")
+    bot_active = health_result.get("status") == "ok"
+
+    timeline: list[dict[str, Any]] = []
+    events = [
+        ("Last action", "✅", state.last_action_time, state.last_action),
+        ("Last post", "📝", state.last_post_time, None),
+        ("Notification check", "🔔", state.last_notification_check_time, None),
+        ("Last reply", "💬", state.last_reply_time, state.last_reply_status),
+        ("Bot started", "⏱️", state.bot_started_at, None),
+    ]
+    for label, icon, timestamp, detail in events:
+        if timestamp is None:
+            continue
+        timeline.append(
+            {
+                "label": label,
+                "icon": icon,
+                "timestamp": timestamp.isoformat(),
+                "detail": detail,
+            }
+        )
+    timeline.sort(key=lambda item: item["timestamp"], reverse=True)
+
+    cookie_path = Path("config/cookie.json")
+    cookie_present = cookie_path.exists() and cookie_path.stat().st_size > 0
+
+    max_posts = max(config.rate_limits.max_posts_per_day, 1)
+    max_replies = max(config.rate_limits.max_replies_per_day, 1)
+    posts_today = state.counters.get("posts_today", 0)
+    replies_today = state.counters.get("replies_today", 0)
+
+    return {
+        "status": "ok",
+        "generated_at": now.isoformat(),
+        "health": {
+            "active": bot_active,
+            "scheduler_running": scheduler_result.get("scheduler_running"),
+            "scheduler_paused": state.paused,
+            "cookie_present": cookie_present,
+            "llm_provider": config.llm.provider,
+            "llm_model": config.llm.model,
+            "last_action": state.last_action,
+            "last_action_time": state.last_action_time.isoformat()
+            if state.last_action_time
+            else None,
+            "last_reply_status": state.last_reply_status,
+        },
+        "scheduler": {"jobs": jobs},
+        "queues": {
+            "pending_jobs": job_queue.pending_job_ids(),
+            "interesting_preview": [
+                _summarize_queue_item(item) for item in state.interesting_posts_queue[:5]
+            ],
+            "notifications_preview": [
+                _summarize_queue_item(item) for item in state.notifications_queue[:5]
+            ],
+        },
+        "today": {
+            "posts_today": posts_today,
+            "replies_today": replies_today,
+            "posts_remaining": max(max_posts - posts_today, 0),
+            "replies_remaining": max(max_replies - replies_today, 0),
+            "posts_pct": min(int((posts_today / max_posts) * 100), 100),
+            "replies_pct": min(int((replies_today / max_replies) * 100), 100),
+            "read_posts_total": db_stats.get("read_posts_count", 0),
+            "written_tweets_total": db_stats.get("written_tweets_count", 0),
+            "rejected_tweets_total": db_stats.get("rejected_tweets_count", 0),
+            "token_usage_entries": db_stats.get("token_usage_entries", 0),
+            "hourly_tokens": hourly_tokens,
+        },
+        "pipeline": {
+            "read_posts_total": db_stats.get("read_posts_count", 0),
+            "interesting_queue": len(state.interesting_posts_queue),
+            "notifications_queue": len(state.notifications_queue),
+            "pending_jobs": job_queue.size(),
+            "written_tweets_total": db_stats.get("written_tweets_count", 0),
+            "rejected_tweets_total": db_stats.get("rejected_tweets_count", 0),
+            "posts_today": posts_today,
+            "replies_today": replies_today,
+        },
+        "timeline": timeline[:8],
+        "logs": {
+            "tail": [
+                rendered
+                for rendered in (
+                    _humanize_log_line(line)
+                    for line in _tail_lines(Path("logs/bot.log"), limit=16)
+                )
+                if rendered
+            ]
+        },
+    }
+
+
 @router.post("/chat", response_model=ChatMessageResponse)
 async def chat_with_agent(
     payload: ChatMessageRequest, config: ConfigDep
@@ -526,6 +840,63 @@ async def chat_with_agent(
         raise HTTPException(status_code=500, detail=f"Chat failed: {root_exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Chat failed: {exc}") from exc
+
+
+@router.post("/chat/stream")
+async def chat_with_agent_stream(
+    payload: ChatMessageRequest, config: ConfigDep
+) -> StreamingResponse:
+    """Stream a chat response as SSE events for the dashboard chat UI."""
+    message = (payload.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    env_settings = _load_env_settings()
+    has_provider = any(
+        [
+            env_settings.get("OPENAI_API_KEY"),
+            env_settings.get("OPENROUTER_API_KEY"),
+            env_settings.get("GOOGLE_API_KEY"),
+            env_settings.get("ANTHROPIC_API_KEY"),
+        ]
+    )
+    if not has_provider:
+        raise HTTPException(
+            status_code=400,
+            detail="No LLM API key configured (.env). Set at least one of OPENAI_API_KEY, OPENROUTER_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY.",
+        )
+
+    async def _stream() -> AsyncIterator[str]:
+        try:
+            yield "event: start\ndata: {}\n\n"
+            result = await _run_chat(message, config)
+            chunks = _chunk_text_for_stream(result.reply)
+            for chunk in chunks:
+                payload_json = json.dumps({"delta": chunk}, ensure_ascii=False)
+                yield f"event: chunk\ndata: {payload_json}\n\n"
+                await asyncio.sleep(0.015)
+
+            meta_json = json.dumps(
+                {
+                    "provider": result.provider,
+                    "prompt_tokens": result.prompt_tokens,
+                    "completion_tokens": result.completion_tokens,
+                    "total_tokens": result.total_tokens,
+                    "timestamp": result.timestamp,
+                },
+                ensure_ascii=False,
+            )
+            yield f"event: meta\ndata: {meta_json}\n\n"
+            yield "event: done\ndata: {}\n\n"
+        except RetryError as exc:
+            root_exc = exc.last_attempt.exception() if exc.last_attempt else exc
+            err = json.dumps({"error": str(root_exc)}, ensure_ascii=False)
+            yield f"event: error\ndata: {err}\n\n"
+        except Exception as exc:
+            err = json.dumps({"error": str(exc)}, ensure_ascii=False)
+            yield f"event: error\ndata: {err}\n\n"
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
 @router.post("/posts/manual", response_model=ManualPostResponse)
@@ -735,6 +1106,39 @@ async def _pause_scheduler() -> dict[str, Any]:
 async def _resume_scheduler() -> dict[str, Any]:
     """Resume scheduler via control server."""
     return await _post_control("/resume", local_method="resume_all")
+
+
+async def _get_scheduler_jobs() -> dict[str, Any]:
+    """Get scheduler jobs snapshot via control server with local fallback."""
+    result = await _get_control("/jobs")
+    if result.get("status") == "ok":
+        return result
+
+    scheduler = get_scheduler()
+    if scheduler is None:
+        return result
+
+    try:
+        jobs = await asyncio.to_thread(scheduler.get_jobs_snapshot)
+        return {"status": "ok", "jobs": jobs, "scheduler_running": scheduler.is_running}
+    except Exception as exc:
+        return {"status": "error", "reason": f"local_jobs_snapshot_failed: {exc}"}
+
+
+async def _run_scheduler_job_now(job_id: str) -> dict[str, Any]:
+    """Trigger a scheduler job immediately via control server with local fallback."""
+    result = await _post_control(f"/run/{job_id}")
+    if result.get("status") != "error":
+        return result
+
+    scheduler = get_scheduler()
+    if scheduler is None:
+        return result
+
+    try:
+        return await asyncio.to_thread(scheduler.run_job_now, job_id)
+    except Exception as exc:
+        return {"status": "error", "reason": f"local_run_job_failed: {exc}"}
 
 
 @router.post("/scheduler/pause")

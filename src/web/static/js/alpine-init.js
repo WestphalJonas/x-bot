@@ -400,10 +400,17 @@
     Alpine.data('dashboardPage', (initialState) => ({
       state: initialState || {},
       uptimeText: '',
+      overview: null,
+      overviewLoading: false,
+      overviewError: '',
+      actionBusy: {},
       _uptimeInterval: null,
+      _overviewInterval: null,
       init() {
         this.updateUptime();
         this._uptimeInterval = window.setInterval(() => this.updateUptime(), 60000);
+        this.refreshOverview();
+        this._overviewInterval = window.setInterval(() => this.refreshOverview(), 10000);
         window.addEventListener('xbot:dashboard-toggle', () => {
           this.toggleSchedulerPause();
         });
@@ -411,6 +418,33 @@
         if (btn) {
           btn.dataset.paused = this.state.paused ? 'true' : 'false';
         }
+      },
+      async refreshOverview() {
+        if (this.overviewLoading) return;
+        this.overviewLoading = true;
+        this.overviewError = '';
+        try {
+          const response = await fetch('/api/dashboard/overview', {
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.detail || 'Failed to load overview');
+          }
+          this.overview = data;
+          this.$nextTick(() => this.scrollRecentLogsToBottom());
+        } catch (error) {
+          this.overviewError = error instanceof Error ? error.message : String(error);
+          console.warn('Dashboard overview refresh failed', error);
+        } finally {
+          this.overviewLoading = false;
+        }
+      },
+      scrollRecentLogsToBottom() {
+        const el = this.$refs && this.$refs.recentLogsViewport;
+        if (!el) return;
+        el.scrollTop = el.scrollHeight;
       },
       updateUptime() {
         if (!this.state.startedAt) {
@@ -456,6 +490,7 @@
             const count = data.next_runs ? Object.keys(data.next_runs).length : 0;
             this.state.nextRunsCount = count;
           }
+          this.refreshOverview();
         } catch (error) {
           console.error('Scheduler toggle failed:', error);
           btn.textContent = 'Error';
@@ -473,7 +508,107 @@
         if (this.state.paused) {
           return `Next runs captured: ${this.state.nextRunsCount || 0}`;
         }
-        return 'Next run recalculated on resume';
+        const nextJob = this.sortedJobs()[0];
+        if (nextJob && nextJob.next_run_in_seconds != null) {
+          return `Next ${this.prettyJobName(nextJob.job_id)} in ${this.formatDuration(nextJob.next_run_in_seconds)}`;
+        }
+        return 'Live schedule loaded';
+      },
+      jobs() {
+        return (this.overview && this.overview.scheduler && this.overview.scheduler.jobs) || [];
+      },
+      sortedJobs() {
+        return this.jobs()
+          .slice()
+          .sort((a, b) => {
+            const av = a.next_run_in_seconds ?? Number.POSITIVE_INFINITY;
+            const bv = b.next_run_in_seconds ?? Number.POSITIVE_INFINITY;
+            return av - bv;
+          });
+      },
+      queuePendingJobs() {
+        return (this.overview && this.overview.queues && this.overview.queues.pending_jobs) || [];
+      },
+      queuePreview(kind) {
+        if (!this.overview || !this.overview.queues) return [];
+        return this.overview.queues[kind] || [];
+      },
+      timelineItems() {
+        return (this.overview && this.overview.timeline) || [];
+      },
+      logLines() {
+        return (this.overview && this.overview.logs && this.overview.logs.tail) || [];
+      },
+      todayMetrics() {
+        return (this.overview && this.overview.today) || {};
+      },
+      pipelineMetrics() {
+        return (this.overview && this.overview.pipeline) || {};
+      },
+      healthSnapshot() {
+        return (this.overview && this.overview.health) || {};
+      },
+      formatDuration(seconds) {
+        if (seconds == null || Number.isNaN(Number(seconds))) return 'n/a';
+        const total = Math.max(0, Math.floor(Number(seconds)));
+        const d = Math.floor(total / 86400);
+        const h = Math.floor((total % 86400) / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        if (d > 0) return `${d}d ${h}h`;
+        if (h > 0) return `${h}h ${m}m`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+      },
+      formatRelativeTime(iso) {
+        if (!iso) return '';
+        const date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return iso;
+        const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+        if (diffSec < 60) return `${diffSec}s ago`;
+        if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+        if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+        return `${Math.floor(diffSec / 86400)}d ago`;
+      },
+      prettyJobName(jobId) {
+        const names = {
+          post_tweet: 'Post Tweet',
+          read_posts: 'Read Timeline',
+          check_notifications: 'Check Notifications',
+          process_inspiration_queue: 'Process Inspiration',
+          process_replies: 'Process Replies',
+        };
+        return names[jobId] || String(jobId || '').replaceAll('_', ' ');
+      },
+      barStyle(value, max) {
+        const safeMax = Math.max(Number(max) || 1, 1);
+        const pct = Math.max(4, Math.min(100, Math.round(((Number(value) || 0) / safeMax) * 100)));
+        return `width: ${pct}%`;
+      },
+      barHeightStyle(value, max) {
+        const safeMax = Math.max(Number(max) || 1, 1);
+        const pct = Math.max(8, Math.min(100, Math.round(((Number(value) || 0) / safeMax) * 100)));
+        return `height: ${pct}%`;
+      },
+      async triggerJob(jobId) {
+        if (!jobId) return;
+        if (this.actionBusy[jobId]) return;
+        this.actionBusy = { ...this.actionBusy, [jobId]: true };
+        try {
+          const response = await fetch(`/api/scheduler/run/${encodeURIComponent(jobId)}`, {
+            method: 'POST',
+            headers: { Accept: 'application/json' },
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.detail || data.reason || 'Run failed');
+          }
+          await this.refreshOverview();
+        } catch (error) {
+          console.error(`Run-now failed for ${jobId}:`, error);
+        } finally {
+          this.actionBusy = { ...this.actionBusy, [jobId]: false };
+        }
       },
     }));
 
@@ -616,10 +751,22 @@
           showConfirm: false,
           posting: false,
           postError: '',
+          streaming: false,
         },
       ],
+      isGenerating: false,
+      _renderRaf: null,
       init() {
         window.addEventListener('xbot:chat-clear', () => this.clearChat());
+        const input = document.getElementById('chat-input');
+        if (input) {
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              this.sendMessage();
+            }
+          });
+        }
         this.renderMessages();
       },
       getEls() {
@@ -631,6 +778,16 @@
           sendBtn: document.getElementById('chat-send-btn'),
           toast: document.getElementById('chat-toast'),
         };
+      },
+      insertPrompt(prefix) {
+        const { input } = this.getEls();
+        if (!input) return;
+        if (!input.value.trim()) {
+          input.value = prefix;
+        } else {
+          input.value = `${input.value}\n${prefix}`;
+        }
+        input.focus();
       },
       showToast(message, isError) {
         const { toast } = this.getEls();
@@ -647,16 +804,39 @@
       },
       setStatus(text, isError) {
         const { statusEl } = this.getEls();
+        const statusEl2 = document.getElementById('chat-status-secondary');
         if (!statusEl) return;
         statusEl.textContent = text || '';
         statusEl.classList.toggle('error', !!isError);
+        if (statusEl2) {
+          statusEl2.textContent = text || '';
+          statusEl2.classList.toggle('error', !!isError);
+        }
+      },
+      scheduleRender() {
+        if (this._renderRaf) return;
+        this._renderRaf = requestAnimationFrame(() => {
+          this._renderRaf = null;
+          this.renderMessages();
+        });
       },
       renderMessages() {
         const { windowEl } = this.getEls();
         if (!windowEl) return;
         windowEl.innerHTML = '';
         this.messages.forEach((message, index) => {
-          const { role, text, meta, allowPost, posted, posting, showConfirm, postError, postedAt } = message;
+          const {
+            role,
+            text,
+            meta,
+            allowPost,
+            posted,
+            posting,
+            showConfirm,
+            postError,
+            postedAt,
+            streaming,
+          } = message;
           const msg = document.createElement('div');
           msg.className = `chat-message chat-message-${role}`;
 
@@ -673,10 +853,22 @@
           textEl.textContent = text;
           bubble.appendChild(textEl);
 
+          if (streaming) {
+            const cursor = document.createElement('span');
+            cursor.className = 'chat-stream-cursor';
+            cursor.textContent = '▋';
+            textEl.appendChild(cursor);
+          }
+
           if (meta) {
             const metaEl = document.createElement('div');
             metaEl.className = 'chat-info';
             metaEl.textContent = meta;
+            bubble.appendChild(metaEl);
+          } else if (role === 'assistant' && streaming) {
+            const metaEl = document.createElement('div');
+            metaEl.className = 'chat-info';
+            metaEl.textContent = 'Thinking...';
             bubble.appendChild(metaEl);
           }
 
@@ -786,44 +978,128 @@
         const { input, sendBtn } = this.getEls();
         if (!input || !sendBtn) return;
         const content = input.value.trim();
-        if (!content) return;
+        if (!content || this.isGenerating) return;
 
         this.messages.push({ role: 'user', text: content });
+        const assistantIndex = this.messages.push({
+          role: 'assistant',
+          text: '',
+          meta: '',
+          allowPost: false,
+          posted: false,
+          posting: false,
+          showConfirm: false,
+          postError: '',
+          streaming: true,
+        }) - 1;
         this.renderMessages();
-        this.setStatus('Generating response...');
+        this.setStatus('Generating response...', false);
         sendBtn.disabled = true;
+        this.isGenerating = true;
+        const messageToSend = content;
+        input.value = '';
+        input.focus();
 
         try {
-          const response = await fetch('/api/chat', {
+          const response = await fetch('/api/chat/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: content }),
+            body: JSON.stringify({ message: messageToSend }),
           });
-          const data = await response.json();
           if (!response.ok) {
-            throw new Error(data.detail || 'Chat failed');
+            let detail = 'Chat failed';
+            try {
+              const data = await response.json();
+              detail = data.detail || detail;
+            } catch {
+              // Ignore parse failure
+            }
+            throw new Error(detail);
           }
-          const meta = `${data.provider} · ${data.total_tokens} tokens`;
-          this.messages.push({
-            role: 'assistant',
-            text: data.reply,
-            meta,
-            allowPost: true,
-            posted: false,
-            posting: false,
-            showConfirm: false,
-            postError: '',
-          });
+
+          const reader = response.body && response.body.getReader ? response.body.getReader() : null;
+          if (!reader) {
+            throw new Error('Streaming not supported in this browser');
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let currentEvent = 'message';
+          let streamError = null;
+
+          const processEvent = (eventName, dataText) => {
+            if (!dataText) return;
+            let payload = {};
+            try {
+              payload = JSON.parse(dataText);
+            } catch {
+              payload = {};
+            }
+
+            if (eventName === 'chunk') {
+              this.messages[assistantIndex].text += payload.delta || '';
+              this.scheduleRender();
+              this.setStatus('Generating response...', false);
+            } else if (eventName === 'meta') {
+              const provider = payload.provider || 'model';
+              const totalTokens = payload.total_tokens ?? 0;
+              this.messages[assistantIndex].meta = `${provider} · ${totalTokens} tokens`;
+              this.messages[assistantIndex].allowPost = true;
+              this.scheduleRender();
+            } else if (eventName === 'error') {
+              streamError = new Error(payload.error || 'Chat stream failed');
+            }
+          };
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let boundary = buffer.indexOf('\n\n');
+            while (boundary !== -1) {
+              const rawEvent = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + 2);
+              let dataText = '';
+              currentEvent = 'message';
+              rawEvent.split('\n').forEach((line) => {
+                if (line.startsWith('event:')) {
+                  currentEvent = line.slice(6).trim();
+                } else if (line.startsWith('data:')) {
+                  dataText += line.slice(5).trim();
+                }
+              });
+              processEvent(currentEvent, dataText);
+              boundary = buffer.indexOf('\n\n');
+            }
+          }
+
+          if (streamError) {
+            throw streamError;
+          }
+          this.messages[assistantIndex].streaming = false;
+          if (!this.messages[assistantIndex].meta) {
+            this.messages[assistantIndex].meta = 'Agent';
+          }
           this.setStatus('');
           this.showToast('Response received', false);
           this.renderMessages();
         } catch (error) {
           console.error('Chat error', error);
-          this.setStatus('', false);
+          if (this.messages[assistantIndex]) {
+            this.messages[assistantIndex].streaming = false;
+            if (!this.messages[assistantIndex].text) {
+              this.messages.splice(assistantIndex, 1);
+            } else {
+              this.messages[assistantIndex].postError = error.message || 'Request failed';
+              this.messages[assistantIndex].meta = 'Partial response';
+            }
+          }
+          this.renderMessages();
+          this.setStatus(error.message || 'Request failed', true);
           this.showToast(error.message || 'Request failed', true);
         } finally {
+          this.isGenerating = false;
           sendBtn.disabled = false;
-          input.value = '';
           input.focus();
         }
       },
@@ -837,6 +1113,7 @@
           posted: false,
           posting: false,
           showConfirm: false,
+          streaming: false,
         });
         this.renderMessages();
         this.setStatus('');
@@ -857,6 +1134,7 @@
         const clear = document.getElementById('clear-btn');
         const pauseToggle = document.getElementById('pause-stream-toggle');
         const output = document.getElementById('log-output');
+        const formatInputs = document.querySelectorAll('input[name="log-format"]');
 
         if (!level || !tail || !reconnect || !clear || !pauseToggle || !output) {
           return;
@@ -867,6 +1145,7 @@
           output.textContent = '';
         });
         level.addEventListener('change', () => this.connect());
+        formatInputs.forEach((el) => el.addEventListener('change', () => this.connect()));
         pauseToggle.addEventListener('change', (e) => {
           this.isPaused = e.target.checked;
           this.setStatus(this.isPaused ? 'Paused' : 'Connected', this.isPaused ? 'warning' : 'success');
@@ -890,6 +1169,7 @@
         const level = document.getElementById('log-level');
         const tailBytes = document.getElementById('tail-bytes');
         const autoscroll = document.getElementById('autoscroll-toggle');
+        const formatSelected = document.querySelector('input[name="log-format"]:checked');
         if (!output || !level || !tailBytes || !autoscroll) return;
 
         this.closeStream();
@@ -900,6 +1180,7 @@
           params.append('level', level.value);
         }
         params.append('tail_bytes', tailBytes.value || '0');
+        params.append('human', formatSelected && formatSelected.value === 'human' ? 'true' : 'false');
 
         this.setStatus('Connecting…', 'info');
         this.evtSource = new EventSource(`/api/logs/stream?${params.toString()}`);
@@ -918,11 +1199,23 @@
           line.className = 'log-line';
           line.textContent = e.data;
 
-          if (e.data.includes(' ERROR ') || e.data.includes('"ERROR"')) {
+          if (
+            e.data.includes(' ERROR ') ||
+            e.data.includes('"ERROR"') ||
+            e.data.includes('❌ ')
+          ) {
             line.classList.add('log-error');
-          } else if (e.data.includes(' WARNING ') || e.data.includes('"WARNING"')) {
+          } else if (
+            e.data.includes(' WARNING ') ||
+            e.data.includes('"WARNING"') ||
+            e.data.includes('⚠️ ')
+          ) {
             line.classList.add('log-warning');
-          } else if (e.data.includes(' DEBUG ') || e.data.includes('"DEBUG"')) {
+          } else if (
+            e.data.includes(' DEBUG ') ||
+            e.data.includes('"DEBUG"') ||
+            e.data.includes('🔍 ')
+          ) {
             line.classList.add('log-debug');
           }
 
