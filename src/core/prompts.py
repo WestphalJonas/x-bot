@@ -70,10 +70,8 @@ Check these criteria:
 4. QUALITY: Is it specific (not generic/vague)?
 5. RULES: No hashtags, no banned phrases?
 
-If ALL criteria pass, respond "YES".
-If ANY criterion fails, respond "NO".
-
-Respond with only YES or NO."""
+Return ONLY strict JSON (no code fences, no prose):
+{{"aligned": true|false, "reason": "short reason"}}"""
 
 RE_EVALUATION_PROMPT = """Final gatekeeper check for posting this tweet.
 
@@ -174,7 +172,8 @@ Score:
 - If topic doesn't match → NO (regardless of quality)
 - If spam/low-effort/meme → NO
 
-Respond with only YES or NO."""
+Return ONLY strict JSON (no code fences, no prose):
+{{"interesting": true|false, "reason": "short reason"}}"""
 
 
 NOTIFICATION_INTENT_PROMPT = """Classify whether to respond to this notification.

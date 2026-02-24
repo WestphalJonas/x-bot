@@ -1,6 +1,6 @@
 # X Bot
 
-Autonomous Twitter/X bot built with Python, Selenium, LangChain/LangGraph, ChromaDB memory, and a FastAPI dashboard.
+Autonomous Twitter/X bot built with Python, Selenium, LangChain/LangGraph, ChromaDB memory, and a FastAPI dashboard (`Jinja2 + HTMX + Alpine.js + Tailwind CSS`).
 
 ## What It Does
 
@@ -16,15 +16,20 @@ Autonomous Twitter/X bot built with Python, Selenium, LangChain/LangGraph, Chrom
 - Python `3.13+`
 - `uv` package manager
 - Google Chrome installed
+- Node.js + npm (for Tailwind CSS build)
 
 ## Setup (Bash)
 
 ```bash
 uv sync
-cp config/env.template .env
+cp config/env.template config/.env
+npm install
+npm run tailwind:build
 ```
 
-### Required `.env` values
+Note: The web dashboard loads environment variables from `config/.env`.
+
+### Required `config/.env` values
 
 ```env
 TWITTER_USERNAME=your_x_username
@@ -37,7 +42,7 @@ GOOGLE_API_KEY=
 ANTHROPIC_API_KEY=
 ```
 
-### Optional `.env` values
+### Optional `config/.env` values
 
 ```env
 LANGCHAIN_TRACING_V2=false
@@ -64,7 +69,7 @@ Generate an Argon2 hash:
 uv run python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('your-password'))"
 ```
 
-Use the generated hash as `AUTH_PASSWORD_HASH`.
+Use the generated hash as `AUTH_PASSWORD_HASH` in `config/.env`.
 
 ## Configuration
 
@@ -93,6 +98,68 @@ uv run python -m src.web.app
 Dashboard URL:
 
 - `http://localhost:8000`
+
+## Docker / Docker Compose
+
+The project can run in Docker with two services:
+
+- `bot`: scheduler + posting/reading/reply jobs
+- `web`: FastAPI dashboard on port `8000`
+
+### Prerequisites
+
+- Docker
+- Docker Compose (Docker Desktop includes it)
+- `config/.env` configured (same file as local setup)
+
+### Start with Compose
+
+```bash
+cp config/env.template config/.env  # if not created yet
+docker compose up --build
+```
+
+This starts:
+
+- Bot scheduler in background mode
+- Web dashboard at `http://localhost:8000`
+
+Persistent directories are mounted from the host:
+
+- `./config` (includes `cookie.json`)
+- `./data`
+- `./logs`
+
+### Start only one service
+
+```bash
+docker compose up --build bot
+docker compose up --build web
+```
+
+### Notes for Selenium / Chrome in Docker
+
+- Set `selenium.headless: true` in `config/config.yaml` for container usage.
+- `shm_size: 1gb` is configured to reduce Chrome crashes in containers.
+- First start may take longer because dependencies and Chrome are installed during image build.
+
+## Frontend UI (Tailwind)
+
+The dashboard UI is styled via Tailwind CSS and built to:
+
+- `src/web/static/build.css`
+
+Useful commands:
+
+```bash
+npm run tailwind:build
+npm run tailwind:watch
+```
+
+Notes:
+
+- The dashboard stylesheet is generated from `src/web/static/tailwind/input.css`.
+- After changing templates or `src/web/static/tailwind/input.css`, rebuild Tailwind (or run watch mode).
 
 ## Tests
 

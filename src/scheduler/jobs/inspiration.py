@@ -10,7 +10,7 @@ from src.core.llm import LLMClient
 from src.state.manager import load_state, save_state
 from src.state.database import get_database
 from src.state.models import Post
-from src.web.data_tracker import log_action, log_rejected_tweet, log_written_tweet
+from src.monitoring.data_tracker import log_action, log_rejected_tweet, log_written_tweet
 from src.x.posting import post_tweet
 from src.x.session import AsyncTwitterSession
 

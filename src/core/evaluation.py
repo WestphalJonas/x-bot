@@ -1,10 +1,9 @@
 """Tweet re-evaluation before posting."""
-
-import json
 import logging
 
 from src.core.config import BotConfig
 from src.core.llm import LLMClient
+from src.core.llm_parsing import parse_json_object
 from src.core.prompts import RE_EVALUATION_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -14,20 +13,11 @@ def _parse_evaluation_response(raw_response: str) -> tuple[bool, str]:
     """Parse LLM evaluation response into (approve, reason)."""
     cleaned = raw_response.strip()
 
-    # Remove common code fences
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-    if cleaned.lower().startswith("json"):
-        cleaned = cleaned[4:].strip()
-
-    try:
-        parsed = json.loads(cleaned)
-        if isinstance(parsed, dict) and "approve" in parsed:
-            approve = bool(parsed.get("approve", False))
-            reason = str(parsed.get("reason") or "").strip() or "No reason provided"
-            return approve, reason
-    except json.JSONDecodeError:
-        pass
+    parsed = parse_json_object(cleaned)
+    if parsed is not None and "approve" in parsed:
+        approve = bool(parsed.get("approve", False))
+        reason = str(parsed.get("reason") or "").strip() or "No reason provided"
+        return approve, reason
 
     # Fallback parsing for YES/NO style answers
     upper = cleaned.upper()
@@ -77,4 +67,3 @@ async def re_evaluate_tweet(
             exc_info=True,
         )
         raise
-

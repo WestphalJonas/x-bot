@@ -1,7 +1,9 @@
 """SQLite database for persistent storage of tweets and token usage."""
 
+import asyncio
 import json
 import logging
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -521,6 +523,17 @@ class Database:
 
 # Global database instance
 _db: Database | None = None
+_db_lock = threading.Lock()
+
+
+@asynccontextmanager
+async def _db_init_lock() -> AsyncGenerator[None, None]:
+    """Async wrapper around a process-wide DB init lock."""
+    await asyncio.to_thread(_db_lock.acquire)
+    try:
+        yield
+    finally:
+        _db_lock.release()
 
 
 async def get_database(db_path: str = DEFAULT_DB_PATH) -> Database:
@@ -534,8 +547,10 @@ async def get_database(db_path: str = DEFAULT_DB_PATH) -> Database:
     """
     global _db
     if _db is None:
-        _db = Database(db_path)
-        await _db.init()
+        async with _db_init_lock():
+            if _db is None:
+                _db = Database(db_path)
+                await _db.init()
     return _db
 
 

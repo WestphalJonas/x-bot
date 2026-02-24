@@ -23,6 +23,7 @@ personality:
   - blockchain
   - web3
   - memes
+  - cats
 rate_limits:
   max_posts_per_day: 15
   max_replies_per_day: 50
@@ -34,7 +35,7 @@ scheduler:
   mention_check_minutes: 120
   post_interval_hours: 3.0
   post_jitter_hours: 1.0
-  reading_check_minutes: 30
+  reading_check_minutes: 5
 selenium:
   headless: false
   max_delay_seconds: 3.0

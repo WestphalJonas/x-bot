@@ -25,10 +25,20 @@
 {% endblock %}
 
 {% block content %}
-<div class="logs-container">
+<div class="logs-page logs-container" x-data="logsPage()" x-init="init()">
     <div class="logs-toolbar">
         <div class="logs-toolbar-left">
-            <span id="log-status" class="log-status log-status-info">Connecting…</span>
+            <span id="log-status" class="log-status" :class="`log-status-${statusType}`" x-text="statusText">Connecting…</span>
+            <div class="logs-segment" role="group" aria-label="Log format">
+                <label class="logs-segment-item">
+                    <input type="radio" name="log-format" id="log-format-human" value="human" checked />
+                    <span>Human</span>
+                </label>
+                <label class="logs-segment-item">
+                    <input type="radio" name="log-format" id="log-format-json" value="json" />
+                    <span>JSON</span>
+                </label>
+            </div>
         </div>
         <div class="logs-toolbar-right">
             <select id="log-level" class="logs-select" title="Log level filter">
@@ -51,92 +61,8 @@
             </label>
         </div>
     </div>
-    <pre id="log-output" class="log-output"></pre>
+    <div class="logs-frame">
+        <pre id="log-output" class="log-output"></pre>
+    </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-{{ super() }}
-<script>
-(function() {
-    let evtSource = null;
-    let isPaused = false;
-    const output = document.getElementById('log-output');
-    const statusEl = document.getElementById('log-status');
-
-    function setStatus(text, type) {
-        if (!statusEl) return;
-        statusEl.textContent = text;
-        statusEl.className = 'log-status log-status-' + type;
-    }
-
-    function closeStream() {
-        if (evtSource) {
-            evtSource.close();
-            evtSource = null;
-        }
-    }
-
-    function connect() {
-        closeStream();
-        output.textContent = '';
-
-        const level = document.getElementById('log-level').value;
-        const tailBytes = document.getElementById('tail-bytes').value || 0;
-        const params = new URLSearchParams();
-        if (level) params.append('level', level);
-        params.append('tail_bytes', tailBytes);
-
-        setStatus('Connecting…', 'info');
-        evtSource = new EventSource('/api/logs/stream?' + params.toString());
-
-        evtSource.onopen = function() {
-            setStatus('Connected', 'success');
-        };
-
-        evtSource.onerror = function() {
-            setStatus('Disconnected', 'error');
-        };
-
-        evtSource.onmessage = function(e) {
-            if (isPaused) return;
-            const line = document.createElement('div');
-            line.className = 'log-line';
-            line.textContent = e.data;
-
-            // Color-code by level
-            if (e.data.indexOf(' ERROR ') !== -1 || e.data.indexOf('"ERROR"') !== -1) {
-                line.classList.add('log-error');
-            } else if (e.data.indexOf(' WARNING ') !== -1 || e.data.indexOf('"WARNING"') !== -1) {
-                line.classList.add('log-warning');
-            } else if (e.data.indexOf(' DEBUG ') !== -1 || e.data.indexOf('"DEBUG"') !== -1) {
-                line.classList.add('log-debug');
-            }
-
-            output.appendChild(line);
-
-            // Limit lines to prevent memory issues
-            while (output.childElementCount > 2000) {
-                output.removeChild(output.firstChild);
-            }
-
-            if (document.getElementById('autoscroll-toggle').checked) {
-                output.scrollTop = output.scrollHeight;
-            }
-        };
-    }
-
-    document.getElementById('reconnect-btn').addEventListener('click', connect);
-    document.getElementById('clear-btn').addEventListener('click', function() {
-        output.textContent = '';
-    });
-    document.getElementById('log-level').addEventListener('change', connect);
-    document.getElementById('pause-stream-toggle').addEventListener('change', function(e) {
-        isPaused = e.target.checked;
-        setStatus(isPaused ? 'Paused' : 'Connected', isPaused ? 'warning' : 'success');
-    });
-
-    connect();
-})();
-</script>
 {% endblock %}

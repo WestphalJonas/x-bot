@@ -48,6 +48,14 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/jobs")
+async def jobs_snapshot() -> dict[str, Any]:
+    """Return scheduler job timing snapshot."""
+    scheduler = _get_scheduler()
+    jobs = await asyncio.to_thread(scheduler.get_jobs_snapshot)
+    return {"status": "ok", "jobs": jobs, "scheduler_running": scheduler.is_running}
+
+
 @app.post("/pause")
 async def pause_scheduler() -> dict[str, Any]:
     """Pause all scheduler jobs and persist remaining next-run delays."""
@@ -61,6 +69,14 @@ async def resume_scheduler() -> dict[str, Any]:
     """Resume scheduler jobs using persisted next-run delays."""
     scheduler = _get_scheduler()
     result = await asyncio.to_thread(scheduler.resume_all)
+    return result
+
+
+@app.post("/run/{job_id}")
+async def run_job_now(job_id: str) -> dict[str, Any]:
+    """Schedule a specific job to run immediately."""
+    scheduler = _get_scheduler()
+    result = await asyncio.to_thread(scheduler.run_job_now, job_id)
     return result
 
 

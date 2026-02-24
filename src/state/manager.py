@@ -3,6 +3,8 @@
 import asyncio
 import json
 import logging
+import threading
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,8 +15,18 @@ from src.state.models import AgentState
 
 logger = logging.getLogger(__name__)
 
-# Global lock for state file operations to prevent race conditions
-_state_lock = asyncio.Lock()
+# Cross-thread lock for state file operations (scheduler jobs use multiple event loops via asyncio.run)
+_state_lock = threading.Lock()
+
+
+@asynccontextmanager
+async def _state_io_lock():
+    """Async wrapper around a process-wide thread lock."""
+    await asyncio.to_thread(_state_lock.acquire)
+    try:
+        yield
+    finally:
+        _state_lock.release()
 
 
 def should_reset_counters(state: AgentState, reset_time_utc: str = "00:00") -> bool:
@@ -104,7 +116,7 @@ async def load_state(
     Returns:
         AgentState instance, or default state if file doesn't exist
     """
-    async with _state_lock:
+    async with _state_io_lock():
         path = Path(state_path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -176,5 +188,5 @@ async def save_state(
         state: AgentState instance to save
         state_path: Path to state JSON file
     """
-    async with _state_lock:
+    async with _state_io_lock():
         await _save_state_internal(state, state_path)

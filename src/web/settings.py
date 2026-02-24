@@ -31,7 +31,7 @@ class AuthSettings(BaseSettings):
         default=False,
         description="Set Secure flag on session cookie (enable in HTTPS environments)",
     )
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=("config/.env", ".env"), extra="ignore")
 
     @model_validator(mode="after")
     def _validate_hash(self) -> "AuthSettings":

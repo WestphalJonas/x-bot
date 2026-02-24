@@ -5,6 +5,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -112,7 +113,18 @@ def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
 
     def run_job():
         """Execute the actual job."""
-        job_func(config, env_settings)
+        scheduler = None
+        try:
+            from src.scheduler.bot_scheduler import get_scheduler
+
+            scheduler = get_scheduler()
+        except Exception:
+            scheduler = None
+
+        active_config = scheduler.config if scheduler is not None else config
+        # Reload env each run so rotated credentials/keys are picked up without restart.
+        active_env_settings = load_env_settings()
+        job_func(active_config, active_env_settings or env_settings)
 
     def process_queue():
         """Process any pending jobs in the queue."""
@@ -126,7 +138,16 @@ def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
                     extra={"job_id": next_job_id, "remaining": job_queue.size()},
                 )
                 try:
+                    started = time.perf_counter()
                     next_func()
+                    logger.info(
+                        "job_wrapper_completed",
+                        extra={
+                            "job_id": next_job_id,
+                            "source": "queue",
+                            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                        },
+                    )
                 except Exception as e:
                     logger.error(
                         "queued_job_failed",
@@ -144,9 +165,18 @@ def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
             return
 
         try:
+            started = time.perf_counter()
             run_job()
             # After completing, process any queued jobs
             process_queue()
+            logger.info(
+                "job_wrapper_completed",
+                extra={
+                    "job_id": job_id,
+                    "source": "scheduler_wrapper",
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                },
+            )
         finally:
             lock.release()
 
@@ -156,20 +186,28 @@ def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
 def main():
     """Main entry point for the bot scheduler."""
     # Load environment variables
-    load_dotenv()
+    env_path = Path("config/.env")
+    load_dotenv(dotenv_path=env_path)
 
     # Load configuration
     config_path = Path("config/config.yaml")
     config = BotConfig.load(config_path)
 
-    logger.info("bot_starting", extra={"config_path": str(config_path)})
+    logger.info(
+        "bot_starting",
+        extra={"config_path": str(config_path), "env_path": str(env_path)},
+    )
 
     # Load and validate environment settings
     env_settings = load_env_settings()
     try:
         validate_env_settings(env_settings)
     except ValueError as e:
-        logger.error("configuration_error", extra={"error": str(e)})
+        logger.error(
+            "configuration_error: %s",
+            str(e),
+            extra={"error": str(e)},
+        )
         sys.exit(1)
 
     # Initialize scheduler

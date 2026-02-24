@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import logging
 
 from src.core.config import BotConfig, EnvSettings
 from src.core.langchain_clients import ChatResult, LangChainLLM
+from src.core.llm_parsing import parse_json_object
 from src.core.prompts import (
     BRAND_CHECK_PROMPT,
     INSPIRATION_TWEET_PROMPT,
@@ -142,6 +142,11 @@ class LLMClient:
             temperature=0.1,
         )
 
+        parsed = parse_json_object(result.content)
+        if parsed is not None and "aligned" in parsed:
+            return bool(parsed.get("aligned", False))
+
+        # Backward-compatible fallback for older prompt responses
         return result.content.upper().startswith("YES")
 
     async def embed_text(self, text: str) -> list[float]:
@@ -170,7 +175,9 @@ class LLMClient:
                 temperature=0.2,
                 max_tokens=80,
             )
-            data = json.loads(result.content)
+            data = parse_json_object(result.content)
+            if data is None:
+                raise ValueError("Notification intent response was not valid JSON")
             positive = bool(data.get("positive", False))
             reason = str(data.get("reason", "")).strip() or "No reason provided"
             logger.info(

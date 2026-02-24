@@ -1,0 +1,12 @@
+{
+  "name": "x-bot-web-ui",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "tailwind:build": "tailwindcss -c tailwind.config.js -i ./src/web/static/tailwind/input.css -o ./src/web/static/build.css --minify",
+    "tailwind:watch": "tailwindcss -c tailwind.config.js -i ./src/web/static/tailwind/input.css -o ./src/web/static/build.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

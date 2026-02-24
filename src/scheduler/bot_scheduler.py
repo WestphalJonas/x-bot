@@ -91,6 +91,11 @@ class JobQueue:
         with self._lock:
             return len(self._queue)
 
+    def pending_job_ids(self) -> list[str]:
+        """Return a snapshot of pending job IDs."""
+        with self._lock:
+            return list(self._pending_job_ids)
+
 
 # Global job queue instance
 _job_queue = JobQueue()
@@ -161,6 +166,79 @@ class BotScheduler:
             times[job.id] = next_run.isoformat()
 
         return delays, times
+
+    def get_jobs_snapshot(self) -> list[dict[str, object]]:
+        """Return scheduler job timing and paused state snapshot."""
+        now = datetime.now(timezone.utc)
+        jobs: list[dict[str, object]] = []
+
+        state = None
+        try:
+            state = self._load_state_sync()
+        except Exception:
+            state = None
+
+        paused = bool(state.paused) if state else False
+        paused_delays = (state.next_run_delays or {}) if state else {}
+        paused_times = (state.next_run_times or {}) if state else {}
+
+        for job in self.scheduler.get_jobs():
+            next_run = job.next_run_time
+            next_run_iso: str | None = None
+            next_run_in_seconds: float | None = None
+            source = "scheduler"
+
+            if next_run is not None:
+                if next_run.tzinfo is None:
+                    next_run = next_run.replace(tzinfo=timezone.utc)
+                next_run_iso = next_run.isoformat()
+                next_run_in_seconds = max((next_run - now).total_seconds(), 0.0)
+
+            if paused and job.id in paused_delays:
+                next_run_in_seconds = float(paused_delays.get(job.id, 0.0))
+                next_run_iso = paused_times.get(job.id)
+                source = "paused_state"
+
+            jobs.append(
+                {
+                    "job_id": job.id,
+                    "name": job.name,
+                    "next_run_time": next_run_iso,
+                    "next_run_in_seconds": next_run_in_seconds,
+                    "paused": paused,
+                    "source": source,
+                }
+            )
+
+        jobs.sort(key=lambda item: item.get("job_id") or "")
+        return jobs
+
+    def run_job_now(self, job_id: str) -> dict[str, object]:
+        """Trigger a scheduler job to run as soon as possible."""
+        job = self.scheduler.get_job(job_id)
+        if job is None:
+            return {"status": "error", "reason": "job_not_found", "job_id": job_id}
+
+        now = datetime.now(timezone.utc) + timedelta(seconds=1)
+        try:
+            self.scheduler.modify_job(job_id, next_run_time=now)
+        except Exception as exc:
+            logger.warning(
+                "job_run_now_failed",
+                extra={"job_id": job_id, "error": str(exc)},
+            )
+            return {
+                "status": "error",
+                "reason": f"modify_job_failed: {exc}",
+                "job_id": job_id,
+            }
+
+        logger.info("job_run_now_requested", extra={"job_id": job_id})
+        return {
+            "status": "ok",
+            "job_id": job_id,
+            "scheduled_for": now.isoformat(),
+        }
 
     def pause_all(self) -> dict[str, object]:
         """Pause all jobs, persisting remaining time until next run."""

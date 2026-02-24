@@ -4,36 +4,40 @@
 {% block page_title %}Posts{% endblock %}
 
 {% block content %}
-<div class="posts-container">
+<div class="posts-page posts-container" x-data='postsPage({{ active_tab | tojson }})'>
     <!-- Tabs Navigation -->
     <div class="posts-header">
         <div class="tabs">
-            <button class="tab {% if active_tab == 'read' %}active{% endif %}" 
+            <button class="tab {% if active_tab == 'read' %}active{% endif %}"
+                    :class="{ 'active': activeTab === 'read' }"
                     hx-get="/partials/posts/read" 
                     hx-target="#posts-content"
                     hx-swap="innerHTML"
-                    onclick="setActiveTab(this)">
+                    @click="setActiveTab('read')">
                 Read
             </button>
             <button class="tab {% if active_tab == 'interested' %}active{% endif %}"
+                    :class="{ 'active': activeTab === 'interested' }"
                     hx-get="/partials/posts/interested" 
                     hx-target="#posts-content"
                     hx-swap="innerHTML"
-                    onclick="setActiveTab(this)">
+                    @click="setActiveTab('interested')">
                 Interested
             </button>
             <button class="tab {% if active_tab == 'written' %}active{% endif %}"
+                    :class="{ 'active': activeTab === 'written' }"
                     hx-get="/partials/posts/written" 
                     hx-target="#posts-content"
                     hx-swap="innerHTML"
-                    onclick="setActiveTab(this)">
+                    @click="setActiveTab('written')">
                 Written
             </button>
             <button class="tab {% if active_tab == 'rejected' %}active{% endif %}"
+                    :class="{ 'active': activeTab === 'rejected' }"
                     hx-get="/partials/posts/rejected" 
                     hx-target="#posts-content"
                     hx-swap="innerHTML"
-                    onclick="setActiveTab(this)">
+                    @click="setActiveTab('rejected')">
                 Rejected
             </button>
         </div>
@@ -51,10 +55,4 @@
     </div>
 </div>
 
-<script>
-function setActiveTab(button) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    button.classList.add('active');
-}
-</script>
 {% endblock %}
