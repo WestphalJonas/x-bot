@@ -27,9 +27,9 @@ from src.x.session import AsyncTwitterSession
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-CONTROL_URL = os.getenv("SCHEDULER_CONTROL_URL")
-CONTROL_HOST = os.getenv("SCHEDULER_CONTROL_HOST", "127.0.0.1")
-CONTROL_PORT = os.getenv("SCHEDULER_CONTROL_PORT", "8790")
+CONTROL_URL = (os.getenv("SCHEDULER_CONTROL_URL") or "").strip() or None
+CONTROL_HOST = (os.getenv("SCHEDULER_CONTROL_HOST", "127.0.0.1") or "127.0.0.1").strip()
+CONTROL_PORT = (os.getenv("SCHEDULER_CONTROL_PORT", "8790") or "8790").strip()
 
 
 async def _post_control(path: str, local_method: str | None = None) -> dict[str, Any]:
@@ -54,6 +54,23 @@ async def _post_control(path: str, local_method: str | None = None) -> dict[str,
                         "status": "error",
                         "reason": f"local_{local_method}_failed: {inner_exc}",
                     }
+        return {"status": "error", "reason": f"control_request_failed: {exc}"}
+
+
+async def _get_control(path: str) -> dict[str, Any]:
+    """Send a GET to the scheduler control server."""
+    base = CONTROL_URL or f"http://{CONTROL_HOST}:{CONTROL_PORT}"
+    url = f"{base}{path}"
+
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict):
+                return data
+            return {"status": "error", "reason": "invalid_control_response"}
+    except Exception as exc:
         return {"status": "error", "reason": f"control_request_failed: {exc}"}
 
 
@@ -641,6 +658,19 @@ async def get_settings(config: ConfigDep) -> SettingsResponse:
         selenium=config_dict.get("selenium", {}),
         queue_limits=config_dict.get("queue_limits", {}),
     )
+
+
+@router.get("/bot/health")
+async def bot_health() -> dict[str, Any]:
+    """Proxy bot control server health for the dashboard UI."""
+    result = await _get_control("/health")
+    is_active = result.get("status") == "ok"
+    return {
+        "status": "ok" if is_active else "error",
+        "active": is_active,
+        "control_url": CONTROL_URL or f"http://{CONTROL_HOST}:{CONTROL_PORT}",
+        "reason": None if is_active else result.get("reason", "health_check_failed"),
+    }
 
 
 @router.post("/settings")

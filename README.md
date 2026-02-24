@@ -158,7 +158,7 @@ npm run tailwind:watch
 
 Notes:
 
-- `src/web/static/styles.css` (legacy CSS) is no longer loaded by the dashboard.
+- The dashboard stylesheet is generated from `src/web/static/tailwind/input.css`.
 - After changing templates or `src/web/static/tailwind/input.css`, rebuild Tailwind (or run watch mode).
 
 ## Tests

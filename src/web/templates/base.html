@@ -131,8 +131,15 @@
                     <span>Reload Config</span>
                 </button>
                 <div class="status-indicator">
-                    <span class="status-dot"></span>
-                    <span class="status-text">Active</span>
+                    <span
+                        class="status-dot"
+                        :style="botIsActive === false ? 'background: var(--xb-text-muted); animation: none;' : ''"
+                    ></span>
+                    <span
+                        class="status-text"
+                        :title="botHealthReason || ''"
+                        x-text="botStatusText()"
+                    >Checking...</span>
                 </div>
             </div>
         </nav>

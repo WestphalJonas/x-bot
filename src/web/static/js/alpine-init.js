@@ -275,6 +275,10 @@
 
     Alpine.data('appShell', () => ({
       reloadBusy: false,
+      botIsActive: null,
+      botHealthBusy: false,
+      botHealthReason: '',
+      _botHealthInterval: null,
       _systemThemeHandler: null,
       _mediaQueryList: null,
       init() {
@@ -310,9 +314,42 @@
         } catch (error) {
           console.warn('System theme listener init failed', error);
         }
+
+        this.refreshBotHealth();
+        this._botHealthInterval = window.setInterval(() => {
+          this.refreshBotHealth();
+        }, 10000);
       },
       toggleTheme() {
         toggleTheme();
+      },
+      async refreshBotHealth() {
+        if (this.botHealthBusy) return;
+        this.botHealthBusy = true;
+
+        try {
+          const response = await fetch('/api/bot/health', {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.detail || 'Health check failed');
+          }
+          this.botIsActive = data.active === true;
+          this.botHealthReason = data.reason || '';
+        } catch (error) {
+          this.botIsActive = false;
+          this.botHealthReason = error instanceof Error ? error.message : String(error);
+          console.warn('Bot health check failed', error);
+        } finally {
+          this.botHealthBusy = false;
+        }
+      },
+      botStatusText() {
+        if (this.botIsActive === null) return 'Checking...';
+        return this.botIsActive ? 'Active' : 'Inactive';
       },
       async reloadConfig() {
         const btn = this.$refs.reloadConfigBtn || document.getElementById('reload-config-btn');
