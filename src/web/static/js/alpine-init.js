@@ -564,6 +564,22 @@
       todayMetrics() {
         return (this.overview && this.overview.today) || {};
       },
+      maxTokenBucketValue() {
+        const buckets = (this.todayMetrics() && this.todayMetrics().hourly_tokens) || [];
+        let max = 1;
+        for (const bucket of buckets) {
+          const value = Number(bucket && bucket.tokens);
+          if (!Number.isNaN(value) && value > max) max = value;
+        }
+        return max;
+      },
+      tokenBarStyle(tokens) {
+        const value = Math.max(0, Number(tokens) || 0);
+        const max = this.maxTokenBucketValue();
+        const innerChartHeightPx = 48;
+        const px = Math.max(6, Math.round((value / Math.max(max, 1)) * innerChartHeightPx));
+        return `height: ${px}px; background: rgba(14, 165, 233, 0.75);`;
+      },
       pipelineMetrics() {
         return (this.overview && this.overview.pipeline) || {};
       },

@@ -22,7 +22,7 @@
 
 {% block content %}
 <div
-    class="dashboard-page dashboard-grid"
+    class="dashboard-page dashboard-grid xl:items-stretch"
     x-data='dashboardPage({{ {"paused": state.paused, "startedAt": (state.bot_started_at.isoformat() if state.bot_started_at else none), "stoppedAt": (state.bot_stopped_at.isoformat() if state.bot_stopped_at else none), "running": state.running, "nextRunsCount": (state.next_run_delays | length if state.paused else 0)} | tojson }})'
     x-init="init()"
 >
@@ -72,7 +72,7 @@
         </div>
     </div>
 
-    <div class="space-y-4 md:space-y-5 xl:col-span-2">
+    <div class="space-y-4 md:space-y-5 xl:col-span-2 xl:flex xl:h-full xl:flex-col" style="min-height: 0;">
     <section class="section-card">
         <div class="section-header">
             <h2 class="section-title">Operations</h2>
@@ -173,7 +173,10 @@
                         </div>
                         <div class="grid gap-2 sm:grid-cols-2">
                             <div class="activity-item">
-                                <span class="activity-icon">🟢</span>
+                                <span
+                                    class="activity-icon"
+                                    :style="healthSnapshot().active ? 'color: #22c55e;' : 'color: #ef4444;'"
+                                >●</span>
                                 <span class="activity-text">Control health</span>
                                 <span class="activity-value" x-text="healthSnapshot().active ? 'OK' : 'Down'"></span>
                             </div>
@@ -236,13 +239,17 @@
         </div>
     </section>
 
-    <section class="section-card">
+    <section class="section-card xl:flex xl:flex-1 xl:min-h-0 xl:flex-col" style="min-height: 0;">
         <div class="section-header">
             <h2 class="section-title">Recent Logs</h2>
             <a href="/logs" class="text-xs font-medium text-sky-400 hover:text-sky-300">Open full logs</a>
         </div>
-        <div class="section-content">
-            <div x-ref="recentLogsViewport" class="max-h-[24rem] overflow-auto rounded-xl border p-3 font-mono text-xs leading-5" style="border-color: var(--xb-border); background: #0b0f14; color: #d7dee7;">
+        <div class="section-content xl:flex xl:min-h-0 xl:flex-1" style="display: flex; flex: 1 1 auto; min-height: 0;">
+            <div
+                x-ref="recentLogsViewport"
+                class="max-h-[24rem] overflow-auto rounded-xl border p-3 font-mono text-xs leading-5 xl:h-full xl:max-h-none"
+                style="border-color: var(--xb-border); background: #0b0f14; color: #d7dee7; width: 100%; flex: 1 1 auto; min-height: 0;"
+            >
                 <template x-if="logLines().length === 0">
                     <div style="color: #94a3b8;">No log lines available</div>
                 </template>
@@ -295,8 +302,12 @@
                             <div class="text-xs" style="color: var(--xb-text-muted);">No token data yet</div>
                         </template>
                         <template x-for="bucket in (todayMetrics().hourly_tokens || [])" :key="bucket.hour">
-                            <div class="group flex min-w-0 flex-1 flex-col justify-end">
-                                <div class="w-full rounded-sm bg-sky-500/70 group-hover:bg-sky-400" :style="barHeightStyle(bucket.tokens, Math.max(...(todayMetrics().hourly_tokens || [{ tokens: 1 }]).map((x) => x.tokens || 0), 1))"></div>
+                            <div class="group flex h-full min-w-0 flex-1 flex-col justify-end">
+                                <div
+                                    class="w-full rounded-sm group-hover:opacity-90"
+                                    :title="`${bucket.hour}: ${bucket.tokens || 0} tokens`"
+                                    :style="tokenBarStyle(bucket.tokens)"
+                                ></div>
                             </div>
                         </template>
                     </div>
