@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 
@@ -36,3 +37,34 @@ def parse_json_object(raw_response: str) -> dict[str, Any] | None:
         return None
 
     return parsed if isinstance(parsed, dict) else None
+
+
+def parse_structured_bool_response(
+    raw_response: str,
+    *,
+    bool_key: str,
+    reason_key: str = "reason",
+    legacy_true_prefixes: tuple[str, ...] = (),
+    legacy_false_prefixes: tuple[str, ...] = (),
+) -> tuple[bool | None, str | None]:
+    """Parse a JSON bool field with optional fallback for truncated/legacy responses."""
+    parsed = parse_json_object(raw_response)
+    if parsed is not None and bool_key in parsed:
+        value = parsed.get(bool_key)
+        reason = str(parsed.get(reason_key) or "").strip() or None
+        return bool(value), reason
+
+    lowered = (raw_response or "").lower()
+    escaped_key = re.escape(bool_key)
+    if re.search(rf'"{escaped_key}"\s*:\s*true', lowered):
+        return True, None
+    if re.search(rf'"{escaped_key}"\s*:\s*false', lowered):
+        return False, None
+
+    upper = (raw_response or "").strip().upper()
+    if legacy_true_prefixes and upper.startswith(legacy_true_prefixes):
+        return True, None
+    if legacy_false_prefixes and upper.startswith(legacy_false_prefixes):
+        return False, None
+
+    return None, None

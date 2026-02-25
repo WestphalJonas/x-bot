@@ -6,7 +6,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.core.config import BotConfig
 from src.core.llm import LLMClient
-from src.core.llm_parsing import parse_json_object
+from src.core.llm_parsing import parse_structured_bool_response
 from src.core.prompts import INTEREST_CHECK_PROMPT
 from src.state.models import Post
 
@@ -36,15 +36,17 @@ async def check_interest(post: Post, config: BotConfig, llm_client: LLMClient) -
             system_prompt=None,
             operation="interest_check",
             temperature=0.1,
-            max_tokens=10,
+            # JSON + a short reason regularly exceeds 10 tokens and gets truncated.
+            max_tokens=64,
         )
-        parsed = parse_json_object(result.content)
-        if parsed is not None and "interesting" in parsed:
-            matches = bool(parsed.get("interesting", False))
-            reason = str(parsed.get("reason") or "").strip() or None
-        else:
-            # Backward-compatible fallback for older prompts/providers
-            matches = result.content.upper().startswith("YES")
+        matches, reason = parse_structured_bool_response(
+            result.content,
+            bool_key="interesting",
+            legacy_true_prefixes=("YES",),
+            legacy_false_prefixes=("NO",),
+        )
+        if matches is None:
+            matches = False
             reason = None
 
         logger.info(

@@ -6,7 +6,7 @@ import logging
 
 from src.core.config import BotConfig, EnvSettings
 from src.core.langchain_clients import ChatResult, LangChainLLM
-from src.core.llm_parsing import parse_json_object
+from src.core.llm_parsing import parse_structured_bool_response
 from src.core.prompts import (
     BRAND_CHECK_PROMPT,
     INSPIRATION_TWEET_PROMPT,
@@ -138,16 +138,18 @@ class LLMClient:
             user_prompt=prompt,
             system_prompt=None,
             operation="brand_check",
-            max_tokens=10,
+            # JSON + a short reason often exceeds 10 tokens and may be truncated.
+            max_tokens=64,
             temperature=0.1,
         )
 
-        parsed = parse_json_object(result.content)
-        if parsed is not None and "aligned" in parsed:
-            return bool(parsed.get("aligned", False))
-
-        # Backward-compatible fallback for older prompt responses
-        return result.content.upper().startswith("YES")
+        aligned, _ = parse_structured_bool_response(
+            result.content,
+            bool_key="aligned",
+            legacy_true_prefixes=("YES",),
+            legacy_false_prefixes=("NO",),
+        )
+        return bool(aligned)
 
     async def embed_text(self, text: str) -> list[float]:
         """Get embedding for text using configured embedding provider."""
@@ -175,11 +177,15 @@ class LLMClient:
                 temperature=0.2,
                 max_tokens=80,
             )
-            data = parse_json_object(result.content)
-            if data is None:
+            positive, reason = parse_structured_bool_response(
+                result.content,
+                bool_key="positive",
+                legacy_true_prefixes=("YES",),
+                legacy_false_prefixes=("NO",),
+            )
+            if positive is None:
                 raise ValueError("Notification intent response was not valid JSON")
-            positive = bool(data.get("positive", False))
-            reason = str(data.get("reason", "")).strip() or "No reason provided"
+            reason = reason or "No reason provided"
             logger.info(
                 "notification_intent_classified",
                 extra={
@@ -188,7 +194,7 @@ class LLMClient:
                     "positive": positive,
                 },
             )
-            return positive, reason
+            return bool(positive), reason
         except Exception as exc:
             logger.warning(
                 "notification_intent_parse_failed",
