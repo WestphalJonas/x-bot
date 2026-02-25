@@ -29,6 +29,13 @@ class AgentState(BaseModel):
     bot_started_at: datetime | None = Field(
         default=None, description="Timestamp when the bot was started"
     )
+    bot_stopped_at: datetime | None = Field(
+        default=None, description="Timestamp when the bot was last stopped"
+    )
+    running: bool = Field(
+        default=False,
+        description="Whether the bot process is currently running",
+    )
     last_action: str | None = Field(
         default=None, description="Description of the last action performed"
     )

@@ -753,9 +753,12 @@ async def get_dashboard_overview(config: ConfigDep) -> dict[str, Any]:
             "active": bot_active,
             "scheduler_running": scheduler_result.get("scheduler_running"),
             "scheduler_paused": state.paused,
+            "state_running": state.running,
             "cookie_present": cookie_present,
             "llm_provider": config.llm.provider,
             "llm_model": config.llm.model,
+            "bot_started_at": state.bot_started_at.isoformat() if state.bot_started_at else None,
+            "bot_stopped_at": state.bot_stopped_at.isoformat() if state.bot_stopped_at else None,
             "last_action": state.last_action,
             "last_action_time": state.last_action_time.isoformat()
             if state.last_action_time

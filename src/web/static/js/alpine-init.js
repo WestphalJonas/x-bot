@@ -433,6 +433,17 @@
             throw new Error(data.detail || 'Failed to load overview');
           }
           this.overview = data;
+          const health = (data && data.health) || {};
+          if (Object.prototype.hasOwnProperty.call(health, 'bot_started_at')) {
+            this.state.startedAt = health.bot_started_at;
+          }
+          if (Object.prototype.hasOwnProperty.call(health, 'bot_stopped_at')) {
+            this.state.stoppedAt = health.bot_stopped_at;
+          }
+          if (Object.prototype.hasOwnProperty.call(health, 'state_running')) {
+            this.state.running = health.state_running;
+          }
+          this.updateUptime();
           this.$nextTick(() => this.scrollRecentLogsToBottom());
         } catch (error) {
           this.overviewError = error instanceof Error ? error.message : String(error);
@@ -452,8 +463,19 @@
           return;
         }
         const started = new Date(this.state.startedAt);
-        const now = new Date();
-        const diff = now - started;
+        const stopPoint =
+          this.state.running === false && this.state.stoppedAt
+            ? new Date(this.state.stoppedAt)
+            : new Date();
+        if (Number.isNaN(started.getTime()) || Number.isNaN(stopPoint.getTime())) {
+          this.uptimeText = '';
+          return;
+        }
+        const diff = stopPoint - started;
+        if (diff < 0) {
+          this.uptimeText = '';
+          return;
+        }
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
         const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -461,7 +483,7 @@
         if (days > 0) text += `${days}d `;
         if (hours > 0 || days > 0) text += `${hours}h `;
         text += `${minutes}m`;
-        this.uptimeText = `${text} uptime`;
+        this.uptimeText = this.state.running === false ? `${text} ran for` : `${text} uptime`;
       },
       async toggleSchedulerPause() {
         const btn = document.getElementById('pause-resume-btn');

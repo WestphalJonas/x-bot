@@ -6,6 +6,8 @@ import os
 import signal
 import sys
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -84,15 +86,72 @@ def validate_env_settings(env_settings: EnvSettings) -> None:
 
 
 async def set_bot_started() -> None:
-    """Set the bot_started_at timestamp in state."""
+    """Set startup lifecycle state in persisted state."""
     state = await load_state()
-    state.bot_started_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    state.bot_started_at = now
+    state.bot_stopped_at = None
+    state.running = True
     state.last_action = "Bot started"
-    state.last_action_time = datetime.now(timezone.utc)
+    state.last_action_time = now
     await save_state(state)
     logger.info(
         "bot_started_at_set", extra={"timestamp": state.bot_started_at.isoformat()}
     )
+
+
+def _control_server_responding(host: str, port: int, timeout: float = 0.75) -> bool:
+    """Check whether the scheduler control server health endpoint is reachable."""
+    url = f"http://{host}:{port}/health"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return 200 <= getattr(response, "status", 0) < 300
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        return False
+
+
+async def reconcile_stale_running_state(control_host: str, control_port: int) -> None:
+    """Mark a previously running state as stopped if no control server is reachable."""
+    state = await load_state()
+    if not state.running:
+        return
+
+    control_alive = await asyncio.to_thread(
+        _control_server_responding, control_host, control_port
+    )
+    if control_alive:
+        logger.warning(
+            "startup_reconcile_skipped_control_server_reachable",
+            extra={"host": control_host, "port": control_port},
+        )
+        return
+
+    now = datetime.now(timezone.utc)
+    state.running = False
+    state.bot_stopped_at = now
+    state.last_action = "Recovered stale running state"
+    state.last_action_time = now
+    await save_state(state)
+    logger.info(
+        "stale_running_state_reconciled",
+        extra={
+            "host": control_host,
+            "port": control_port,
+            "timestamp": now.isoformat(),
+        },
+    )
+
+
+async def set_bot_stopped() -> None:
+    """Set shutdown lifecycle state in persisted state."""
+    state = await load_state()
+    now = datetime.now(timezone.utc)
+    state.running = False
+    state.bot_stopped_at = now
+    state.last_action = "Bot stopped"
+    state.last_action_time = now
+    await save_state(state)
+    logger.info("bot_stopped_at_set", extra={"timestamp": now.isoformat()})
 
 
 def create_job_wrapper(job_func, config: BotConfig, env_settings: EnvSettings):
@@ -233,9 +292,13 @@ def main():
         create_job_wrapper(process_inspiration_queue, config, env_settings)
     )
 
-    # Start control server for cross-process reload handling
     control_host = os.getenv("SCHEDULER_CONTROL_HOST", "127.0.0.1")
     control_port = int(os.getenv("SCHEDULER_CONTROL_PORT", "8790"))
+
+    # Reconcile stale persisted running state after crashes/unclean exits.
+    asyncio.run(reconcile_stale_running_state(control_host, control_port))
+
+    # Start control server for cross-process reload handling
     start_control_server(scheduler, host=control_host, port=control_port)
 
     # Setup signal handlers for graceful shutdown
@@ -272,6 +335,14 @@ def main():
 
     finally:
         scheduler.shutdown()
+        try:
+            asyncio.run(set_bot_stopped())
+        except Exception as e:
+            logger.warning(
+                "bot_stop_state_update_failed",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
         logger.info("bot_shutdown_complete")
 
 

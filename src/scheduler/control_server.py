@@ -20,6 +20,14 @@ app = FastAPI()
 _scheduler: BotScheduler | None = None
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    """Parse a boolean environment variable."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _get_scheduler() -> BotScheduler:
     """Return the registered scheduler or raise if unavailable."""
     if _scheduler is None:
@@ -89,17 +97,22 @@ def start_control_server(
 
     host = host or os.getenv("SCHEDULER_CONTROL_HOST", "127.0.0.1")
     port = port or int(os.getenv("SCHEDULER_CONTROL_PORT", "8790"))
+    access_log_enabled = _env_bool("SCHEDULER_CONTROL_ACCESS_LOG", default=False)
 
     config = uvicorn.Config(
         app=app,
         host=host,
         port=port,
         log_level=os.getenv("UVICORN_LOG_LEVEL", "info"),
+        access_log=access_log_enabled,
     )
     server = uvicorn.Server(config=config)
 
     thread = threading.Thread(target=server.run, name="scheduler-control", daemon=True)
     thread.start()
 
-    logger.info("control_server_started", extra={"host": host, "port": port})
+    logger.info(
+        "control_server_started",
+        extra={"host": host, "port": port, "access_log_enabled": access_log_enabled},
+    )
     return thread
