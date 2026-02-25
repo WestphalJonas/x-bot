@@ -524,9 +524,24 @@
         }
       },
       schedulerStatusLabel() {
+        const runtime = this.healthSnapshot().runtime_status;
+        if (runtime === 'paused') return 'Paused';
+        if (runtime === 'stopped') return 'Stopped';
+        if (runtime === 'unreachable') return 'Unreachable';
+        if (runtime === 'degraded') return 'Degraded';
         return this.state.paused ? 'Paused' : 'Running';
       },
       schedulerSubtext() {
+        const runtime = this.healthSnapshot().runtime_status;
+        if (runtime === 'stopped') {
+          return 'Bot process stopped';
+        }
+        if (runtime === 'unreachable') {
+          return 'Control server unreachable';
+        }
+        if (runtime === 'degraded') {
+          return 'State says running, scheduler not responding';
+        }
         if (this.state.paused) {
           return `Next runs captured: ${this.state.nextRunsCount || 0}`;
         }

@@ -72,7 +72,7 @@
         </div>
     </div>
 
-    <div class="space-y-4 md:space-y-5 xl:col-span-2 xl:flex xl:h-full xl:flex-col" style="min-height: 0;">
+    <div class="dashboard-col-main space-y-4 md:space-y-5 xl:col-span-2">
     <section class="section-card">
         <div class="section-header">
             <h2 class="section-title">Operations</h2>
@@ -239,16 +239,16 @@
         </div>
     </section>
 
-    <section class="section-card xl:flex xl:flex-1 xl:min-h-0 xl:flex-col" style="min-height: 0;">
+    <section class="section-card dashboard-card-logs">
         <div class="section-header">
             <h2 class="section-title">Recent Logs</h2>
             <a href="/logs" class="text-xs font-medium text-sky-400 hover:text-sky-300">Open full logs</a>
         </div>
-        <div class="section-content xl:flex xl:min-h-0 xl:flex-1" style="display: flex; flex: 1 1 auto; min-height: 0;">
+        <div class="section-content">
             <div
                 x-ref="recentLogsViewport"
-                class="max-h-[24rem] overflow-auto rounded-xl border p-3 font-mono text-xs leading-5 xl:h-full xl:max-h-none"
-                style="border-color: var(--xb-border); background: #0b0f14; color: #d7dee7; width: 100%; flex: 1 1 auto; min-height: 0;"
+                class="recent-logs-viewport max-h-[24rem] overflow-auto rounded-xl border p-3 font-mono text-xs leading-5 xl:h-full xl:max-h-none"
+                style="border-color: var(--xb-border); background: #0b0f14; color: #d7dee7;"
             >
                 <template x-if="logLines().length === 0">
                     <div style="color: #94a3b8;">No log lines available</div>

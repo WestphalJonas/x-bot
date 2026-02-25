@@ -716,6 +716,17 @@ async def get_dashboard_overview(config: ConfigDep) -> dict[str, Any]:
 
     health_result = await _get_control("/health")
     bot_active = health_result.get("status") == "ok"
+    scheduler_running = scheduler_result.get("scheduler_running")
+    if not bot_active:
+        runtime_status = "unreachable"
+    elif state.paused:
+        runtime_status = "paused"
+    elif state.running and scheduler_running is False:
+        runtime_status = "degraded"
+    elif state.running:
+        runtime_status = "running"
+    else:
+        runtime_status = "stopped"
 
     timeline: list[dict[str, Any]] = []
     events = [
@@ -751,9 +762,10 @@ async def get_dashboard_overview(config: ConfigDep) -> dict[str, Any]:
         "generated_at": now.isoformat(),
         "health": {
             "active": bot_active,
-            "scheduler_running": scheduler_result.get("scheduler_running"),
+            "scheduler_running": scheduler_running,
             "scheduler_paused": state.paused,
             "state_running": state.running,
+            "runtime_status": runtime_status,
             "cookie_present": cookie_present,
             "llm_provider": config.llm.provider,
             "llm_model": config.llm.model,
